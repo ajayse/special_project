@@ -42,6 +42,7 @@ def search_for_name(name):
                                                       ).reset_index()
   df_match.columns = ['full_name','email','transaction_id','car','appointment_date','services_availed']
   df_match = df_match.set_index('full_name')
+  df_match.index.name = 'full_name'
   return df_match
 
 all_data = pd.read_csv("http://app.redash.licagroup.ph/api/queries/103/results.csv?api_key=QHb7Vxu8oKMyOVhf4bw7YtWRcuQfzvMS6YBSqgeM", parse_dates=['date','appointment_date','date_confirmed'])
