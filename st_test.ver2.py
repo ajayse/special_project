@@ -54,10 +54,10 @@ def search_for_name(name):
                                                               appointment_date =('appointment_date', lambda x: ', '.join([str(i) for i in x.dt.date.unique()])),
                                                               services_availed =('service_name', lambda x: ', '.join(x.unique()))
                                                           ).reset_index()
-      df_match.columns = ['full_name','email','transaction_id','customer_id', 'brand', 'model/year','fuel_type','transmission','plate_number','contact_no','address','mileage','appointment_date','services_availed']
+      df_match.columns = ['full_name','email','transaction_id','customer_id', 'brand', 'year/model','fuel_type','transmission','plate_number','contact_no','address','mileage','appointment_date','services_availed']
       df_match = df_match.set_index('customer_id')
       df_match.index.name = 'customer_id'
-      df_match = df_match[['full_name','brand','model/year','fuel_type','transmission','plate_number','contact_no','address','mileage','appointment_date','services_availed','email']]
+      df_match = df_match[['full_name','brand','year/model','fuel_type','transmission','plate_number','contact_no','address','mileage','appointment_date','services_availed','email']]
   elif len(left_df) + len(right_df)==0:
       df_match = pd.DataFrame()
   return df_match
