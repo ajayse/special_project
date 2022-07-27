@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import math
-import json as simplejson
 from st_aggrid import GridOptionsBuilder, AgGrid
 
 
