@@ -24,43 +24,43 @@ def fix_name(name):
   '''
   name_list = list()
   for n in str.lower(name).split(' '):
-    if n not in name_list:
+    if n not in name_list and n!='':
       name_list.append(n)
   return ' '.join(name_list).strip()
 
-def search_for_data(name):
-  df_data.full_name = df_data.full_name.apply(lambda x: x.lower())
-  names = df_data.loc[df_data.apply(lambda x: name.lower() in x.full_name, axis=1)]
-  df_temp = names[['customer_id','full_name', 'brand', 'model/year','fuel_type','transmission','plate_number','phone','address','mileage','appointment_date','id','service_name']]
-  df_temp['full_name'] = df_temp['full_name'].str.title()
-  
-  return df_temp.set_index('full_name')
 
 def search_for_name(name):
   df_match = pd.DataFrame(),pd.DataFrame()
   df_data.full_name = df_data.full_name.apply(lambda x: x.lower())
   df_data.email = df_data.email.apply(lambda x: x.lower())
-  names = pd.merge(left =df_data.loc[df_data.apply(lambda x: name.lower() in x.full_name, axis=1)],right =df_data.loc[df_data.apply(lambda x: name.lower() in x.email.lower(), axis=1)],
-         how ='outer', on =['id','full_name','email','brand', 'model/year','appointment_date','mechanic_name','service_name','customer_id','fuel_type','transmission','plate_number','phone','address','mileage'])
-  names.email = names.email.str.lower()
-  names.full_name = names.full_name.str.title()
-  df_match = names.groupby(['full_name','email','id']).agg(
-                                                          customer_id=('customer_id', lambda x:' ' if x.empty else x),
-                                                          brand=('brand', lambda x:', '.join(x.unique())),
-                                                          model =('model/year', lambda x:', '.join(x.unique())),
-                                                          fuel_type =('fuel_type', lambda x:' ' if x.empty else x),
-                                                          transmission =('transmission', lambda x:' ' if x.empty else x),
-                                                          plate_number =('plate_number', lambda x:' ' if x.empty else x.str.upper()),
-                                                          phone=('phone', lambda x:'' if x.empty else ', '.join(x.unique())),
-                                                          address=('address', lambda x:'' if x.empty else ', '.join(x.unique())),
-                                                          mileage=('mileage', lambda x:'' if math.isnan(x) else str(x)),
-                                                          appointment_date =('appointment_date', lambda x: ', '.join([str(i) for i in x.dt.date.unique()])),
-                                                          services_availed =('service_name', lambda x: ', '.join(x.unique()))
-                                                      ).reset_index()
-  df_match.columns = ['full_name','email','transaction_id','customer_id', 'brand', 'model/year','fuel_type','transmission','plate_number','contact_no','address','mileage','appointment_date','services_availed']
-  df_match = df_match.set_index('customer_id')
-  df_match.index.name = 'customer_id'
-  return df_match[['full_name','brand','model/year','fuel_type','transmission','plate_number','contact_no','address','mileage','appointment_date','services_availed','email']]
+  left_df =df_data.loc[df_data.apply(lambda x: name.lower() in x.full_name, axis=1)]
+  right_df =df_data.loc[df_data.apply(lambda x: name.lower() in x.email.lower(), axis=1)]
+  if len(left_df) + len(right_df)>0:
+      names = pd.merge(left_df,right_df,
+             how ='outer', on =['id','full_name','email','brand', 'model/year','appointment_date','mechanic_name','service_name','customer_id','fuel_type','transmission','plate_number','phone','address','mileage'])
+      names.email = names.email.str.lower()
+      names.full_name = names.full_name.str.title()
+  
+      df_match = names.groupby(['full_name','email','id']).agg(
+                                                              customer_id=('customer_id', lambda x:' ' if x.empty else x),
+                                                              brand=('brand', lambda x:', '.join(x.unique())),
+                                                              model =('model/year', lambda x:', '.join(x.unique())),
+                                                              fuel_type =('fuel_type', lambda x:' ' if x.empty else x),
+                                                              transmission =('transmission', lambda x:' ' if x.empty else x),
+                                                              plate_number =('plate_number', lambda x:' ' if x.empty else x.str.upper()),
+                                                              phone=('phone', lambda x:'' if x.empty else ', '.join(x.unique())),
+                                                              address=('address', lambda x:'' if x.empty else ', '.join(x.unique())),
+                                                              mileage=('mileage', lambda x:'' if math.isnan(x) else str(x)),
+                                                              appointment_date =('appointment_date', lambda x: ', '.join([str(i) for i in x.dt.date.unique()])),
+                                                              services_availed =('service_name', lambda x: ', '.join(x.unique()))
+                                                          ).reset_index()
+      df_match.columns = ['full_name','email','transaction_id','customer_id', 'brand', 'model/year','fuel_type','transmission','plate_number','contact_no','address','mileage','appointment_date','services_availed']
+      df_match = df_match.set_index('customer_id')
+      df_match.index.name = 'customer_id'
+      df_match = df_match[['full_name','brand','model/year','fuel_type','transmission','plate_number','contact_no','address','mileage','appointment_date','services_availed','email']]
+  elif len(left_df) + len(right_df)==0:
+      df_match = pd.DataFrame()
+  return df_match
 
 
 all_data = pd.read_csv("http://app.redash.licagroup.ph/api/queries/128/results.csv?api_key=KisyFBTEg3GfiTZbrly189LJAHjwAzFIW7l9UElB", parse_dates = ['date','appointment_date','date_confirmed','date_cancelled'])
@@ -93,11 +93,11 @@ string_search = st.sidebar.text_area('Input ', name_search, height =5)
 st.sidebar.write('Searching for ' + string_search)
 
 results = pd.DataFrame()
-results = search_for_name(string_search)
-
-st.write(results)
+results = search_for_name(fix_name(string_search))
 
 if string_search == "Enter name here":
     st.text('Waiting for input...')
 elif len(results) ==0:
     st.text('No results found.')
+elif len(results) >0:
+    st.dataframe(results)
