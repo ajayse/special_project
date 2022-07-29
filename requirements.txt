@@ -1,1 +1,1 @@
-st_aggrid
+st-aggrid
