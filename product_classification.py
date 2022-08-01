@@ -7,15 +7,18 @@ Created on Thu Jul 28 18:59:13 2022
 
 import streamlit as st
 import pandas as pd
-# import datetime
-# import math
-# from st_aggrid import GridOptionsBuilder, AgGrid, GridUpdateMode, DataReturnMode
-# from datetime import datetime
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 pd.options.mode.chained_assignment = None
 
+st.set_page_config(
+    page_title='GoParts Product Classification (ABC-XYZ)',
+    initial_sidebar_state='expanded',
+    menu_items = {
+        'About':"# Thanks for using the app!\n For inquiries, send an email to Arvin Escolano at arvinjayescolano.licagroup@gmail.com."
+        }
+    )
 began = 0
 segment ='brand'
 
@@ -58,6 +61,7 @@ def get_data(df_input,segment,date_interval):
   df_summary['cumulative_pct'] = round((100*df_summary['cvalue']/df_summary['cvalue'].sum()).cumsum(),2)
   df_summary = pd.merge(left =df_summary,right=df_d.transpose(),on=segment)
   df_summary['class']= df_summary['ABC']+df_summary['XYZ']
+  
   
   return df_data, df_summary
 
@@ -339,7 +343,7 @@ def single_avgdemand(item = df[segment].unique()[0]):
           ticks = 'inside',
       ),
       yaxis = dict(
-          title_text="<b>Average quantity sold </b> (units per unit time)",
+          title_text= f"<b>Average {time_interval} Demand </b> (units)",
           gridcolor = 'LightGrey',
           linewidth = 0.1,
           mirror = True,
@@ -364,14 +368,9 @@ def single_avgdemand(item = df[segment].unique()[0]):
   results = pd.DataFrame(info_summary,index =[0])
   results =results.set_index('item')
   container.write(results)
-  
-st.title('GoParts Product Classification')
 
-st.markdown("""
-            This app classifies the products of GoParts based on **ABC**-**XYZ** classification. 
-            Relevant data are also presented such as the demand per indicated time interval. 
-            Kindly select the _parameters_ in the sidebar to begin analysis.
-            """)
+def convert_df(df):
+    return df.to_csv().encode('utf-8')
 
 st.sidebar.header('Parameters for Analysis')
 st.sidebar.text('Select the parameters that would\nbe taken into account during the\nanalysis.')
@@ -412,9 +411,29 @@ if  segment_i != '':
     began = 1
 else:
     st.sidebar.write('Select Product segmentation')
+
     
-if began ==1:
-    st.header("Inventory Classification for GoParts by " + time_interval+" Demand per "+segment_i+" based on **ABC**-**XYZ** Classification")
+if began == 0:  
+    st.title('GoParts Product Classification')
+    
+    st.markdown("""
+                This app classifies the products of GoParts based on **ABC**-**XYZ** classification. 
+                Relevant data are also presented such as the demand per indicated time interval. 
+                Kindly select the _parameters_ in the sidebar to begin analysis.
+                """)    
+elif (date_start>date_end):
+    began ==0
+    st.title('GoParts Product Classification')
+    
+    st.markdown("""
+                This app classifies the products of GoParts based on **ABC**-**XYZ** classification. 
+                Relevant data are also presented such as the demand per indicated time interval. 
+                Kindly select the _parameters_ in the sidebar to begin analysis.
+                """)   
+    st.title("Please indicate a valid date interval.")
+
+elif began ==1 and (date_start<date_end):
+    st.title("Inventory Classification for GoParts by " + time_interval+" Demand per "+segment_i+" based on **ABC**-**XYZ** Classification")
     segment = segment_dict[segment_i]
     df_input = df.loc[df['date'] > np.datetime64(date_start)].loc[df['date']< np.datetime64(date_end)]
     df_data, df_summary = get_data(df_input,segment,date_interval)
@@ -424,84 +443,21 @@ if began ==1:
     plot_pareto()
     sbar_text = st.container()
     stacked_bar()
-    avgdemand_text = st.container()
+    
+    st.header('Demand per '+segment_i+":")
+
     item_i = st.selectbox(
-        label = 'Select item to view demand per date interval:',
+        label = 'Select '+segment_i+' to view its '+time_interval.lower()+' demand:',
         options =tuple(df_summary.index)
         )
     single_avgdemand(item =item_i)
-    classifications_text = st.container()
-    expander1 = st.expander('All classifications:')
-    with expander1:
+    avgdemand_text = st.container()
     
-        with st.container():
-            ax, ay, az = st.columns(3)
-            with ax:
-                ax_0 = st.checkbox('Show AX data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>AX</b></p>
-                            High profit value, consistent orders, easily forecasted, recommended to be stocked.""", unsafe_allow_html=True)
-            with ay:
-                ay_0 = st.checkbox('Show AY data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>AY</b></p>
-                            High profit value, variable orders or demand, recommended to be stocked.""", unsafe_allow_html=True) 
-            with az:
-                az_0 = st.checkbox('Show AZ data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>AZ</b></p>
-                            High profit value, highly inconsistent demand, difficult to be forecasted.""", unsafe_allow_html=True) 
-            bx, by, bz = st.columns(3)
-            with bx:
-                st.markdown(' --- ')
-                bx_0 = st.checkbox('Show BX data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>BX</b></p>
-                            Medium profit value, consistent orders, easily forecasted, recommended to be stocked.""", unsafe_allow_html=True)
-            with by:
-                st.markdown(' --- ')
-                by_0 = st.checkbox('Show BY data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>BY</b></p>
-                            Medium profit value, variable orders or demand.""", unsafe_allow_html=True)  
-            with bz:
-                st.markdown(' --- ')
-                bz_0 = st.checkbox('Show BZ data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>BZ</b></p>
-                            Medium profit value, highly inconsistent demand, difficult to forecast.""", unsafe_allow_html=True)  
-            cx, cy, cz = st.columns(3)
-            with cx:
-                st.markdown(' --- ')
-                cx_0 = st.checkbox('Show CX data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>CX</b></p>
-                            Low profit value, consistent orders, easily forecasted.""", unsafe_allow_html=True)  
-            with cy:
-                st.markdown(' --- ')
-                cy_0 = st.checkbox('Show CY data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>CY</b></p>
-                            Low profit value, variable orders or demand.""", unsafe_allow_html=True)   
-            with cz:
-                st.markdown(' --- ')
-                cz_0 = st.checkbox('Show CZ data')
-                st.markdown("""
-                            <p style="text-align: center;"><b>CZ</b></p>
-                            Low profit value, highly inconsistent demand.""", unsafe_allow_html=True)   
-            data_filter = np.array([ax_0,ay_0,az_0,bx_0,by_0,bz_0,cx_0,cy_0,cz_0])
-            class_elements = np.array(['AX','AY','AZ','BX','BY','BZ','CX','CY','CZ'])
-            if sum(data_filter)>0:
-                df_show = df_summary[df_summary['class'].isin(class_elements[data_filter])][['class','cvalue','quantity']]
-                df_show.columns = ['Classification','Profit (PHP)','Quantity Sold (units)']
-                if len(df_show) >0:
-                    st.dataframe(df_show)
-                else:
-                    st.write('No items are included.')
-            else:
-                st.write('Include at least 1 classification above.')
-            
+
+    
+    
         
+    
     df_final=df_summary.reset_index().groupby('class').agg(
                                 segment_count=(segment, lambda x: x.nunique()),
                                 total_demand=('quantity', lambda x: int(x.sum())),
@@ -513,14 +469,123 @@ if began ==1:
     st.dataframe(df_final)
     
     
-    intro_text.write("Introduction")
+    with st.container():
+        classifications_text = st.container()
+        st.text('All classifications:')
+        ax, ay, az = st.columns(3)
+        with ax:
+            ax_0 = st.checkbox('Show AX data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>AX</b></p>
+                        High profit value, consistent orders, easily forecasted, recommended to be stocked.""", unsafe_allow_html=True)
+        with ay:
+            ay_0 = st.checkbox('Show AY data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>AY</b></p>
+                        High profit value, variable orders or demand, recommended to be stocked.""", unsafe_allow_html=True) 
+        with az:
+            az_0 = st.checkbox('Show AZ data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>AZ</b></p>
+                        High profit value, highly inconsistent demand, difficult to be forecasted.""", unsafe_allow_html=True) 
+        bx, by, bz = st.columns(3)
+        with bx:
+            st.markdown(' --- ')
+            bx_0 = st.checkbox('Show BX data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>BX</b></p>
+                        Medium profit value, consistent orders, easily forecasted, recommended to be stocked.""", unsafe_allow_html=True)
+        with by:
+            st.markdown(' --- ')
+            by_0 = st.checkbox('Show BY data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>BY</b></p>
+                        Medium profit value, variable orders or demand.""", unsafe_allow_html=True)  
+        with bz:
+            st.markdown(' --- ')
+            bz_0 = st.checkbox('Show BZ data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>BZ</b></p>
+                        Medium profit value, highly inconsistent demand, difficult to forecast.""", unsafe_allow_html=True)  
+        cx, cy, cz = st.columns(3)
+        with cx:
+            st.markdown(' --- ')
+            cx_0 = st.checkbox('Show CX data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>CX</b></p>
+                        Low profit value, consistent orders, easily forecasted.""", unsafe_allow_html=True)  
+        with cy:
+            st.markdown(' --- ')
+            cy_0 = st.checkbox('Show CY data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>CY</b></p>
+                        Low profit value, variable orders or demand.""", unsafe_allow_html=True)   
+        with cz:
+            st.markdown(' --- ')
+            cz_0 = st.checkbox('Show CZ data')
+            st.markdown("""
+                        <p style="text-align: center;"><b>CZ</b></p>
+                        Low profit value, highly inconsistent demand.""", unsafe_allow_html=True)   
+        data_filter = np.array([ax_0,ay_0,az_0,bx_0,by_0,bz_0,cx_0,cy_0,cz_0])
+        class_elements = np.array(['AX','AY','AZ','BX','BY','BZ','CX','CY','CZ'])
+        if sum(data_filter)>0:
+            df_show = df_summary[df_summary['class'].isin(class_elements[data_filter])][['class','cvalue','quantity']]
+            df_show.columns = ['Classification','Profit (PHP)','Quantity Sold (units)']
+            if len(df_show) >0:
+                st.dataframe(df_show)
+            else:
+                st.write('No items are included.')
+        else:
+            st.write('Include at least 1 classification above.')
+    
+    
+    with st.expander('All data:'):
+        df_all_show = df_summary[['class','cvalue', 'quantity', 'cv']].copy()
+        df_all_show.columns = ['Classification', 'Profit (PHP)', 'Quantity Sold (units)', 'Coefficient of Variation']
+        st.dataframe(df_all_show)
+     
+    st.header("Download data as .csv files")
+    st.text("Click on the download button to save the supporting data for the analysis.")
+    save1, save2, save3 = st.columns(3)
+    with save1:
+        st.download_button(
+            label = "Download results",
+            data = convert_df(df_final),
+            file_name="classification_results_summary.csv",
+            mime ='text/csv'
+            )  
+        st.caption("Information on segment count, total demand, average demand, total profit, and members per ABC-XYZ classification")
+    with save2:
+        st.download_button(
+            label = "Download classification data",
+            data = convert_df(df_all_show),
+            file_name="abc_xyz_results.csv",
+            mime ='text/csv'
+            )  
+        st.caption("Information on classification, profit, quantity, and coefficient of variation per "+segment_i.lower())
+    with save3:
+        st.download_button(
+            label = "Download demand data",
+            data = convert_df(df_data.fillna(0)),
+            file_name="demand_summary.csv",
+            mime ='text/csv'
+            )  
+        st.caption("Information on the "+ time_interval.lower() +" demand per "+ segment_i.lower()+" with respect to the selected date interval.")
+        
+
+        
+    intro_text.write("**Introduction**")
+    intro_text.write("The ABC-XYZ is a paired classification for inventory itmes that would describe the importance of the "+segment_i+" to the business and and its variablity in demand. The **ABC classification** classifies a "+segment_i+" based on its contribution in profit. On the other hand, the **XYZ-classification** describes the variability in demand with respect to the coefficient of variation on its "+time_interval.lower()+" demand. The analysis below reflects the relevant information that would potentially help us in managing the inventory.")
     pareto_text.header('Pareto Analysis')
-    pareto_text.write('The pareto chart for the analysis is shown below. The bar plot corresponds to the consumption value (profit) in PHP represents the contribution of each segment. On the other hand, the other hand, the line plot shows the cumulattive percentage of the consumption value as we rank the decreasing consumption value of each segment. The most valueable items of the segment is constituted by the items that compose 80% of the total income, which we classify as A (highlighted as green). Now, the other componenets that constitute up to 95% of the income would be classified as B (highlighted as yellow), while the rest are classified as C (highlighted as red). '+
-                      ' We can aslo denote that the items that are' )
+    pareto_text.write(
+        "The pareto chart for the analysis is shown below. The bar plot corresponds to the consumption value (profit) in PHP represents the contribution of each "+segment_i.lower()+". On the other hand, the line plot shows the cumulattive percentage of the consumption value as we rank the decreasing consumption value of each segment. The most valueable items of the segment is constituted by the items that compose 80% of the total income, which we classify as A (highlighted as green)."+ 
+        "Now, the other componenets that constitute up to 95% of the income would be classified as B (highlighted as yellow), while the rest are classified as C (highlighted as red)."
+                      )
     sbar_text.header('Overall Demand')
-    sbar_text.write('Insert Analysis here' )
-    avgdemand_text.header('Demand Analysis')
-    avgdemand_text.markdown(""" Insert analysis here""")
+    sbar_text.write(
+        "The demand for each "+segment_i.lower()+" is shown below."
+        )
+    avgdemand_text.write('The average '+time_interval+' demand for '+item_i+' is shown above. We can see that the **XYZ** classification would tell how the demand for the respective '+segment_i+' would vary across time. Moreover, the errorbars would indicate its variation per order at any given time over the indicated time interval. This would provide us with some insight on how we can manage the stock and lay out expectations on what would be its demand.')
     results_text.header("Results")
-    results_text.markdown(""" Insert analysis here""")
+    results_text.text('The summary of relevant parameters per each classifcation is shown below. The count, total demand, average demand, total profit, and the respective '+segment_i+' that falls into each product classification are summarized in the given table. The descriptions for the respective classifications are shown further below')
     
