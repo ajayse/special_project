@@ -7,18 +7,6 @@ Original file is located at
     https://colab.research.google.com/drive/1MX1xonpnegc-6os6BH3WwSXcS0hVWf11
 """
 
-import sys
-import subprocess
-import pkg_resources
-
-required = {'pandas', 'numpy', 'plotly', 'scikit-learn'}
-installed = {pkg.key for pkg in pkg_resources.working_set}
-missing = required - installed
-
-if missing:
-    python = sys.executable
-    subprocess.check_call([python, '-m', 'pip', 'install', *missing], stdout=subprocess.DEVNULL)
-
 import streamlit as st
 import pandas as pd
 import numpy as np
