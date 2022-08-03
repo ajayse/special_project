@@ -135,7 +135,7 @@ def get_clusters(df_input):
     cluster_centers = np.array([[5,5,5,5],[4,1,3,1],[3,1,1,3],[1,1,1,1]])
   else:
     df_temp = df_input[['R','F', 'M']]
-    cluster_centers = np.array([[5,5,5],[3,1,1],[1,3,3],[1,1,1]])
+    cluster_centers = np.array([[5,5,5],[1,3,3],[3,1,1],[1,1,1]])
   nclusters = len(cluster_centers)
   model = KMeans(n_clusters = nclusters, init= cluster_centers, max_iter = 5000)
   cluster_labels = model.fit_predict(df_temp)
