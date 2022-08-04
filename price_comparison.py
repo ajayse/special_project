@@ -171,24 +171,25 @@ with ct5:
 
 df = pd.DataFrame.from_dict(response['selected_rows'])
 
-if len(df)>0:
-    df = df.drop('make', axis =1)
-    df = df.set_index('model')
-    df = df.replace('',np.nan).dropna(axis=1, how='all')
-    if 'rowIndex' in df.columns.to_list():
-        df = df.drop('rowIndex', axis =1)
-    
-    df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
-    df['GP'] = df[df.columns.to_list()[-1]].apply(lambda x: consider_GP(x,GP))
-    df,tiers = apply_tier(df)
-    st.dataframe(df.style.apply(highlight_gulong, axis=None)\
-             .apply(highlight_others,axis=None)\
-             .format(precision = 2),
-             1000, 640)
-             #.format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}","Tier 5": "{:.2f}"}))
+d1, d2,d3 = st.columns([1,4,1])
+with d2:
+    if len(df)>0:
+        df = df.drop('make', axis =1)
+        df = df.set_index('model')
+        df = df.replace('',np.nan).dropna(axis=1, how='all')
+        if 'rowIndex' in df.columns.to_list():
+            df = df.drop('rowIndex', axis =1)
 
-else:
-    st.info("Kindly check/select at lease one row above.")
+        df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
+        df['GP'] = df[df.columns.to_list()[-1]].apply(lambda x: consider_GP(x,GP))
+        df,tiers = apply_tier(df)
+        st.dataframe(df.style.apply(highlight_gulong, axis=None)\
+                 .apply(highlight_others,axis=None)\
+                 .format(precision = 2))
+                 #.format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}","Tier 5": "{:.2f}"}))
+
+    else:
+        st.info("Kindly check/select at lease one row above.")
 
 st.markdown("""
             ---
