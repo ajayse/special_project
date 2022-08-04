@@ -99,9 +99,6 @@ def highlight_others(x):#cols = ['GP','Tier 1','Tier 3', etc]
         df1[column]= np.where(c, 'color:{};font-weight:{}'.format('red','bold'), df1[column])#.set_index(['make','model'])
     return df1
 
-def return_suppliers():
-    selected_supplier_ = list(supplier_cols)
-
 df_final, supplier_cols = acquire_data()
 
 
@@ -186,7 +183,8 @@ if len(df)>0:
     df,tiers = apply_tier(df)
     st.dataframe(df.style.apply(highlight_gulong, axis=None)\
              .apply(highlight_others,axis=None)\
-             .format(precision = 2))
+             .format(precision = 2),
+             1000, 640)
              #.format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}","Tier 5": "{:.2f}"}))
 
 else:
