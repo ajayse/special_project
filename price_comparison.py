@@ -15,8 +15,12 @@ from st_aggrid import GridUpdateMode, DataReturnMode
 import math
 import numpy as np
 
-st.set_page_config(page_icon=":chart_with_upwards_trend:", page_title="Gulong Price Comparison",layout="wide")
-pd.options.display.float_format = "{:,.2f}".format
+st.set_page_config(page_icon=":chart_with_upwards_trend:", 
+                   page_title="Gulong Price Comparison",
+                   layout="wide",
+                   menu_items = {
+                       'About':"# Thanks for using the app!\n For inquiries, send an email to Arvin Escolano at arvinjayescolano.licagroup@gmail.com."
+                       })
 @st.experimental_memo
 def upload_data():
     url1, url2 =  "http://app.redash.licagroup.ph/api/queries/82/results.csv?api_key=fEm6wVpPGIH8R5Pks7I62ULYuVEOSZBBHHJgVwX4", "http://app.redash.licagroup.ph/api/queries/72/results.csv?api_key=aUZHO0183ucPVY4txOPrWiiiQPcxmjtiFFpwZ3ct"
@@ -95,92 +99,110 @@ def highlight_others(x):#cols = ['GP','Tier 1','Tier 3', etc]
         df1[column]= np.where(c, 'color:{};font-weight:{}'.format('red','bold'), df1[column])
     return df1
 
-if st.sidebar.button('Update Data'):
-    st.experimental_memo.clear()
-    df_final = pd.DataFrame()
-    supplier_cols = []
+
 df_final, supplier_cols = upload_data()
 
-st.sidebar.header('Options')
-view = st.sidebar.radio('View',
-                 ('All Data/Select by SKU', 'Select by Supplier', 'Download'))
 
-if view == 'All Data/Select by SKU':
-    st.header("All Data")
-    st.write("Select the SKUs that would be considered for the computations.",
-             " Feel free to filter the _make_ and _model_ that would be shown. You may also select/deselect columns.")
+
+st.header("All Data")
+st.write("Select the SKUs that would be considered for the computations.",
+         " Feel free to filter the _make_ and _model_ that would be shown. You may also select/deselect columns.")
+
+df_show =df_final.set_index(['make','model']).fillna(0)
+df_show['supplier_max_price'] = df_show[supplier_cols].fillna(0).max(axis=1)
+cols = df_show.columns.to_list()
+cols = cols[:2] + cols[-1:] + cols[2:-1]
+df_show = df_show[cols].reset_index().replace(0,'')
+gb = GridOptionsBuilder.from_dataframe(df_show)
+gb.configure_default_column(enablePivot=True, enableValue=False, enableRowGroup=False)
+gb.configure_selection(selection_mode="multiple", use_checkbox=True)
+gb.configure_side_bar()  # side_bar is clearly a typo :) should by sidebar
+gridOptions = gb.build()
+
+response = AgGrid(
+    df_show,
+    gridOptions=gridOptions,
+    height = 300,
+    #width = '100%',
+    editable=True,
+    enable_enterprise_modules=True,
+    update_mode=GridUpdateMode.MODEL_CHANGED,
+    data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
+    fit_columns_on_grid_load=False,
+)
+st.markdown("""
+            ---
+            """)
+st.header("Price Comparison")
+st.write("You may set the GP and the price comparison between models would be shown in a table.")
+c1, cs1,cS, ct1, ct2,ct3,ct4,ct5,cs2 = st.columns([3,2,1,1,1,1,1,1,3])
+with c1:
+    GP = st.number_input("GP (%):",min_value=0.00,max_value = 100.00,
+                              value=25.00, step = 0.01)
+with cS:
+    st.write('Include tier:')
+with ct1:
+    tier1 = st.checkbox('Tier 1')
+with ct2:
+    tier2 = st.checkbox('Tier 2')
+with ct3:
+    tier3 = st.checkbox('Tier 3')
+with ct4:
+    tier4 = st.checkbox('Tier 4')
+with ct5:
+    tier5 = st.checkbox('Tier 5')
+
+df = pd.DataFrame.from_dict(response['selected_rows'])
+if len(df)>0:
+    df = df.drop(['make','supplier_max_price'], axis =1)
+    df = df.set_index('model')
+    df = df.replace('',np.nan).dropna(axis=1, how='all')
+    df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
+    df['GP'] = df[df.columns.to_list()[-1]].apply(lambda x: consider_GP(x,GP))
+    df,tiers = apply_tier(df)
+    st.write(df.style.apply(highlight_gulong, axis=None)\
+             .apply(highlight_others,axis=None)\
+             .format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}",
+                       "Tier 5": "{:.2f}"}))
+
+st.markdown("""
+            ---
+            """)
+st.header('Download tables:')
+st.write("**All data:**")
+if df_final is not None:
+    csv = convert_df(df_show)
+    st.download_button(
+                        label="gulong_pricing.csv",
+                        data=csv,
+                        file_name='gulong_pricing.csv',
+                        mime='text/csv'
+                        )
+if df is not None:
+    csv = convert_df(df)
+    st.write("**Price comparison table:**")
+    st.download_button(
+                        label="price_comparison.csv",
+                        data=csv,
+                        file_name='price_comparison.csv',
+                        mime='text/csv'
+                        )
     
-    df_show =df_final.set_index(['make','model']).fillna(0)
-    df_show['supplier_max_price'] = df_show[supplier_cols].fillna(0).max(axis=1)
-    cols = df_show.columns.to_list()
-    cols = cols[:2] + cols[-1:] + cols[2:-1]
-    df_show = df_show[cols].reset_index().replace(0,'')
-    gb = GridOptionsBuilder.from_dataframe(df_show)
-    gb.configure_default_column(enablePivot=True, enableValue=False, enableRowGroup=False)
-    gb.configure_selection(selection_mode="multiple", use_checkbox=True)
-    gb.configure_side_bar()  # side_bar is clearly a typo :) should by sidebar
-    gridOptions = gb.build()
+st.markdown("""
+            ---
+            """)
 
-    response = AgGrid(
-        df_show,
-        gridOptions=gridOptions,
-        height = 300,
-        #width = '100%',
-        editable=True,
-        enable_enterprise_modules=True,
-        update_mode=GridUpdateMode.MODEL_CHANGED,
-        data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-        fit_columns_on_grid_load=False,
-    )
-    
-    st.header("Price Comparison")
-    st.write("You may set the GP and the price comparison between models would be shown in a table.")
-    c1, cs1,cS, ct1, ct2,ct3,ct4,ct5,cs2 = st.columns([3,2,1,1,1,1,1,1,3])
-    with c1:
-        GP = st.number_input("GP (%):",min_value=0.00,max_value = 100.00,
-                                  value=25.00, step = 0.01)
-    with cS:
-        st.write('Include tier:')
-    with ct1:
-        tier1 = st.checkbox('Tier 1')
-    with ct2:
-        tier2 = st.checkbox('Tier 2')
-    with ct3:
-        tier3 = st.checkbox('Tier 3')
-    with ct4:
-        tier4 = st.checkbox('Tier 4')
-    with ct5:
-        tier5 = st.checkbox('Tier 5')
-    
-    df = pd.DataFrame.from_dict(response['selected_rows'])
-    if len(df)>0:
-        df = df.drop(['make','supplier_max_price'], axis =1)
-        df = df.set_index('model')
-        df = df.replace('',np.nan).dropna(axis=1, how='all')
-        df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
-        df['GP'] = df[df.columns.to_list()[-1]].apply(lambda x: consider_GP(x,GP))
-        df,tiers = apply_tier(df)
-        st.write(df.style.apply(highlight_gulong, axis=None)\
-                 .apply(highlight_others,axis=None)\
-                 .format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}",
-                           "Tier 5": "{:.2f}"}))
+cA, cB =st.columns([2,2])
+with cA:
+    st.warning('Update data only if neccessary')
+with cB:
+    if st.button('Update Data'):
+        st.experimental_memo.clear()
+        df_final = pd.DataFrame()
+        supplier_cols = []
+        
 
 
-
-
-elif view == 'Download':
-    cA, cB = st.columns([2, 1])
-    with cA:
-        st.header('Download all data:')
-    with cB:
-        if df_final is not None:
-            csv = convert_df(df_show)
-            st.download_button(
-                                label="gulong_pricing.csv",
-                                data=csv,
-                                file_name='gulong_pricing.csv',
-                                mime='text/csv'
-                                )
 
 #elif view =='Select by Supplier':
     
