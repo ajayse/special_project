@@ -87,7 +87,7 @@ def apply_tier(df):
 def highlight_gulong(x):
     c1 = (x['gulong_price'] != x.max(axis=1))
     df1 = pd.DataFrame('background-color: ', index=x.index, columns=x.columns)
-    df1['gulong_price']= np.where(c1, 'background-color: {}'.format('yellow'), df1['gulong_price'])
+    df1['gulong_price']= np.where(c1, 'background-color: {}'.format('pink'), df1['gulong_price'])
     return df1
 
 def highlight_others(x):#cols = ['GP','Tier 1','Tier 3', etc]
