@@ -14,6 +14,8 @@ from sklearn.cluster import KMeans
 
 import plotly.graph_objects as go
 
+
+st.set_page_config(page_icon=":blue_car:", page_title="RFM Analysis")
 pd.options.mode.chained_assignment = None
 
 colors = dict({'recency':'honeydew',
