@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 from st_aggrid import AgGrid
 from st_aggrid.grid_options_builder import GridOptionsBuilder
-from st_aggrid import GridUpdateMode, DataReturnMode
+from st_aggrid import GridUpdateMode, DataReturnMode, JsCode
 import math
 import numpy as np
 
@@ -22,7 +22,7 @@ st.set_page_config(page_icon=":chart_with_upwards_trend:",
                        'About':"# Thanks for using the app!\n For inquiries, send an email to Arvin Escolano at arvinjayescolano.licagroup@gmail.com."
                        })
 @st.experimental_memo
-def upload_data():
+def acquire_data():
     url1, url2 =  "http://app.redash.licagroup.ph/api/queries/82/results.csv?api_key=fEm6wVpPGIH8R5Pks7I62ULYuVEOSZBBHHJgVwX4", "http://app.redash.licagroup.ph/api/queries/72/results.csv?api_key=aUZHO0183ucPVY4txOPrWiiiQPcxmjtiFFpwZ3ct"
     df_data = pd.read_csv(url1, parse_dates = ['supplier_price_date_updated','product_price_date_updated'])
     df_data = df_data[['make','model','slug', 'name','cost','srp', 'promo', 'supplier_price_date_updated','product_price_date_updated']]#'product_price_date_updated'
@@ -31,7 +31,7 @@ def upload_data():
     df_supplier = df_supplier.dropna()
     df_supplier = df_supplier.loc[df_supplier['supplier_price']>0]
     df_supplier = df_supplier.drop_duplicates(subset=['model','supplier'],keep='first')
-    df_supplier = df_supplier.groupby(['make','model','supplier'], group_keys=False).agg(price = ('supplier_price',lambda x: x.max()))
+    df_supplier = df_supplier.groupby(['make','model','supplier'], group_keys=False).agg(price = ('supplier_price',lambda x: x))
     df_supplier = df_supplier.unstack('supplier').reset_index().set_index(['make','model'])
     df_supplier.columns = [i[1] for i in df_supplier.columns]
     df_gulong = df_data[['make','model', 'gulong_price','promo_price','gulong_updated']].copy().sort_values(by='gulong_updated',ascending=False)
@@ -96,46 +96,66 @@ def highlight_others(x):#cols = ['GP','Tier 1','Tier 3', etc]
     df1 = pd.DataFrame('background-color: ', index=x.index, columns=x.columns)
     for column in cols: 
         c = (x[column] > x['gulong_price'])
-        df1[column]= np.where(c, 'color:{};font-weight:{}'.format('red','bold'), df1[column])
+        df1[column]= np.where(c, 'color:{};font-weight:{}'.format('red','bold'), df1[column])#.set_index(['make','model'])
     return df1
 
+def return_suppliers():
+    selected_supplier_ = list(supplier_cols)
 
-df_final, supplier_cols = upload_data()
+df_final, supplier_cols = acquire_data()
 
 
 
 st.header("All Data")
+cols = ['make','model','gulong_price','promo_price']
+
+with st.expander('Include/remove suppliers in list:'):
+    beta_multiselect = st.container()
+    check_all = st.checkbox('Select all', value=True)
+    if check_all:
+        selected_supplier_ = beta_multiselect.multiselect('Included suppliers in table:',
+                                       options = supplier_cols,
+                                       default = list(supplier_cols))
+    else:
+        selected_supplier_ = beta_multiselect.multiselect('Included suppliers in table:',
+                                       options = supplier_cols)
+
+cols.extend(selected_supplier_)
 st.write("Select the SKUs that would be considered for the computations.",
          " Feel free to filter the _make_ and _model_ that would be shown. You may also select/deselect columns.")
 
-df_show =df_final.set_index(['make','model']).fillna(0)
-df_show['supplier_max_price'] = df_show[supplier_cols].fillna(0).max(axis=1)
-cols = df_show.columns.to_list()
-cols = cols[:2] + cols[-1:] + cols[2:-1]
-df_show = df_show[cols].reset_index().replace(0,'')
+df_show =df_final[cols].dropna(how = 'all',subset = selected_supplier_,axis=0).fillna(0)
+df_show = df_show.replace(0,'')
+
 gb = GridOptionsBuilder.from_dataframe(df_show)
-gb.configure_default_column(enablePivot=True, enableValue=False, enableRowGroup=False)
+gb.configure_default_column(enablePivot=False, enableValue=False, enableRowGroup=False, editable = True)
+gb.configure_column('make', headerCheckboxSelection = True)
 gb.configure_selection(selection_mode="multiple", use_checkbox=True)
-gb.configure_side_bar()  # side_bar is clearly a typo :) should by sidebar
+gb.configure_side_bar()  
 gridOptions = gb.build()
 
-response = AgGrid(
-    df_show,
+response = AgGrid(df_show,
+    theme = 'light',
     gridOptions=gridOptions,
     height = 300,
     #width = '100%',
     editable=True,
+    allow_unsafe_jscode=True,
+    reload_data=False,
     enable_enterprise_modules=True,
     update_mode=GridUpdateMode.MODEL_CHANGED,
     data_return_mode=DataReturnMode.FILTERED_AND_SORTED,
-    fit_columns_on_grid_load=False,
+    fit_columns_on_grid_load=False
 )
+
+st.write("Results: "+str(len(df_show))+" entries")
+
 st.markdown("""
             ---
             """)
 st.header("Price Comparison")
 st.write("You may set the GP and the price comparison between models would be shown in a table.")
-c1, cs1,cS, ct1, ct2,ct3,ct4,ct5,cs2 = st.columns([3,2,1,1,1,1,1,1,3])
+c1, cs1,cS, ct1, ct2,ct3,ct4,ct5,cs2 = st.columns([2,2,1,1,1,1,1,1,3])
 with c1:
     GP = st.number_input("GP (%):",min_value=0.00,max_value = 100.00,
                               value=25.00, step = 0.01)
@@ -155,18 +175,22 @@ with ct5:
 df = pd.DataFrame.from_dict(response['selected_rows'])
 
 if len(df)>0:
-    df = df.drop(['make','supplier_max_price'], axis =1)
+    df = df.drop('make', axis =1)
     df = df.set_index('model')
     df = df.replace('',np.nan).dropna(axis=1, how='all')
     if 'rowIndex' in df.columns.to_list():
         df = df.drop('rowIndex', axis =1)
+    
     df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
     df['GP'] = df[df.columns.to_list()[-1]].apply(lambda x: consider_GP(x,GP))
     df,tiers = apply_tier(df)
-    st.write(df.style.apply(highlight_gulong, axis=None)\
+    st.dataframe(df.style.apply(highlight_gulong, axis=None)\
              .apply(highlight_others,axis=None)\
-             .format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}",
-                       "Tier 5": "{:.2f}"}))
+             .format(precision = 2))
+             #.format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}","Tier 5": "{:.2f}"}))
+
+else:
+    st.info("Kindly check/select at lease one row above.")
 
 st.markdown("""
             ---
@@ -204,4 +228,34 @@ with cB:
         st.experimental_memo.clear()
         df_final = pd.DataFrame()
         supplier_cols = []
- 
+        
+
+
+
+#elif view =='Select by Supplier':
+    
+
+# GP = st.sidebar.number_input("GP (%):",min_value=0.00,max_value = 100.00,
+#                              value=25.00, step = 0.01)
+
+# supplier_list = st.sidebar.multiselect("Select supplier/s", supplier_cols)
+# st.sidebar.write("Include tier:")
+# t1 = st.sidebar.checkbox("Tier 1")
+# t2 = st.sidebar.checkbox("Tier 2")
+# t3 = st.sidebar.checkbox("Tier 3")
+# t4 = st.sidebar.checkbox("Tier 4")
+# t5 = st.sidebar.checkbox("Tier 5")
+
+# st.write()
+
+
+
+
+
+
+
+# cC, cD, cE = st.columns([1, 8, 1])
+# with cD:
+#     if df_final is not None:
+#         raw_container = st.expander('Show uploaded data:')
+#         raw_container.write(df_final)
