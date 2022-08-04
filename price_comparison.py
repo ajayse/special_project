@@ -153,11 +153,12 @@ with ct5:
     tier5 = st.checkbox('Tier 5')
 
 df = pd.DataFrame.from_dict(response['selected_rows'])
+
 if len(df)>0:
     df = df.drop(['make','supplier_max_price'], axis =1)
     df = df.set_index('model')
     df = df.replace('',np.nan).dropna(axis=1, how='all')
-    df['max_price'] = df[df.columns.to_list().remove(['gulong_price','promo_price','rowIndex'])].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
+    df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
     df['GP'] = df[df.columns.to_list()[-1]].apply(lambda x: consider_GP(x,GP))
     df,tiers = apply_tier(df)
     st.write(df.style.apply(highlight_gulong, axis=None)\
@@ -168,6 +169,7 @@ if len(df)>0:
 st.markdown("""
             ---
             """)
+            
 st.header('Download tables:')
 st.write("**All data:**")
 if df_final is not None:
@@ -201,33 +203,3 @@ with cB:
         df_final = pd.DataFrame()
         supplier_cols = []
         
-
-
-
-#elif view =='Select by Supplier':
-    
-
-# GP = st.sidebar.number_input("GP (%):",min_value=0.00,max_value = 100.00,
-#                              value=25.00, step = 0.01)
-
-# supplier_list = st.sidebar.multiselect("Select supplier/s", supplier_cols)
-# st.sidebar.write("Include tier:")
-# t1 = st.sidebar.checkbox("Tier 1")
-# t2 = st.sidebar.checkbox("Tier 2")
-# t3 = st.sidebar.checkbox("Tier 3")
-# t4 = st.sidebar.checkbox("Tier 4")
-# t5 = st.sidebar.checkbox("Tier 5")
-
-# st.write()
-
-
-
-
-
-
-
-# cC, cD, cE = st.columns([1, 8, 1])
-# with cD:
-#     if df_final is not None:
-#         raw_container = st.expander('Show uploaded data:')
-#         raw_container.write(df_final)
