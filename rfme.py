@@ -39,28 +39,32 @@ cluster_color = dict({
 # Garage data-http://app.redash.licagroup.ph/queries/99
 
 
-#Backend data
-df_backend = pd.read_csv("http://app.redash.licagroup.ph/api/queries/112/results.csv?api_key=Tz8lLRHbcyOTGfHprtKqICB8txfFm4mNuNbFWlZF", parse_dates = ['created_at'])
-df_backend = df_backend[['created_at','id', 'product_desc','GarageId','Income','total_price_no_shipping','garage_type']]
-df_backend.columns = ['date', 'id', 'product_desc', 'garage_id', 'income', 'revenue', 'garage_type']
-df_backend['date'] = df_backend['date'].dt.date
-df_backend['garage_type'].loc[df_backend['garage_type']== 'Inactive'] = 'B2C'
-df_backend['garage_type'].loc[df_backend['garage_type']== 'nonlica_delearship'] = 'nonlica_dealership'
+@st.cache
+def _gather_data_():
+    df_backend = pd.read_csv("http://app.redash.licagroup.ph/api/queries/112/results.csv?api_key=Tz8lLRHbcyOTGfHprtKqICB8txfFm4mNuNbFWlZF", parse_dates = ['created_at'])
+    df_backend = df_backend[['created_at','id', 'product_desc','GarageId','Income','total_price_no_shipping','garage_type']]
+    df_backend.columns = ['date', 'id', 'product_desc', 'garage_id', 'income', 'revenue', 'garage_type']
+    df_backend['date'] = df_backend['date'].dt.date
+    df_backend['garage_type'].loc[df_backend['garage_type']== 'Inactive'] = 'B2C'
+    df_backend['garage_type'].loc[df_backend['garage_type']== 'nonlica_delearship'] = 'nonlica_dealership'
 
-#Engagement data
-sheet_id = '1JDdrHrFVvLnjMabaCjj9XYSU5sdrz9-S7pbJWW643pY'
-sheet_name = 'goparts_analysis_website'
-url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
-e_data = pd.read_csv(url)
-e_data = e_data.fillna(0)
-e_data.columns = ['garage_id','avg_session_duration', 'pageviews_per_session', 'sessions', 'adds_to_cart', 'checkouts']
-e_data['garage_id'] =e_data['garage_id'].astype(int)
-e_data['engagement'] = e_data['avg_session_duration']/e_data['avg_session_duration'].max() + e_data['pageviews_per_session']/e_data['pageviews_per_session'].max() +e_data['sessions']/e_data['sessions'].max() + e_data['adds_to_cart']/e_data['adds_to_cart'].max() + e_data['checkouts']/e_data['checkouts'].max()
+    #Engagement data
+    sheet_id = '1JDdrHrFVvLnjMabaCjj9XYSU5sdrz9-S7pbJWW643pY'
+    sheet_name = 'goparts_analysis_website'
+    url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
+    e_data = pd.read_csv(url)
+    e_data = e_data.fillna(0)
+    e_data.columns = ['garage_id','avg_session_duration', 'pageviews_per_session', 'sessions', 'adds_to_cart', 'checkouts']
+    e_data['garage_id'] =e_data['garage_id'].astype(int)
+    e_data['engagement'] = e_data['avg_session_duration']/e_data['avg_session_duration'].max() + e_data['pageviews_per_session']/e_data['pageviews_per_session'].max() +e_data['sessions']/e_data['sessions'].max() + e_data['adds_to_cart']/e_data['adds_to_cart'].max() + e_data['checkouts']/e_data['checkouts'].max()
 
-#Data for garages
-df_garage = pd.read_csv("http://app.redash.licagroup.ph/api/queries/99/results.csv?api_key=K0xX1pdowwI5Wepot0SUkZqhtnRqpr9bUcqBdiRB")
-df_garage = df_garage[['id','shop_name', 'address']]
-df_garage.columns = ['garage_id', 'shop','location']
+    #Data for garages
+    df_garage = pd.read_csv("http://app.redash.licagroup.ph/api/queries/99/results.csv?api_key=K0xX1pdowwI5Wepot0SUkZqhtnRqpr9bUcqBdiRB")
+    df_garage = df_garage[['id','shop_name', 'address']]
+    df_garage.columns = ['garage_id', 'shop','location']
+    return df_backend,e_data,df_garage
+
+df_backend,e_data,df_garage = _gather_data_()
 
 def grade(rank):
     if rank >0.80:
