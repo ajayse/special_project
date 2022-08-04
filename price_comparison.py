@@ -158,6 +158,8 @@ if len(df)>0:
     df = df.drop(['make','supplier_max_price'], axis =1)
     df = df.set_index('model')
     df = df.replace('',np.nan).dropna(axis=1, how='all')
+    if 'rowIndex' in df.columns.to_list():
+        df = df.drop('rowIndex', axis =1)
     df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
     df['GP'] = df[df.columns.to_list()[-1]].apply(lambda x: consider_GP(x,GP))
     df,tiers = apply_tier(df)
@@ -202,4 +204,4 @@ with cB:
         st.experimental_memo.clear()
         df_final = pd.DataFrame()
         supplier_cols = []
-        
+ 
