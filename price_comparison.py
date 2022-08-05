@@ -53,51 +53,25 @@ def consider_GP(data,GP):
 def ceil_5(n):
     return math.ceil(n/5)*5
 
-def radio_GP(price, tier):
-    if tier =="1":
-        return ceil_5(price/(1-0.30))
-    if tier =="2":
-        return ceil_5(price/(1-0.27))
-    if tier =="3":
-        return round(price/(1-0.25),2)
-    if tier =="4":
-        return ceil_5(price/(1-0.28))
-    if tier =="5":
-        return round(price/(1-0.27),2)
-
-def apply_tier(df):
-    tiers = []
-    if tier1:
-        df['Tier 1'] = df['max_price'].apply(lambda x: radio_GP(x,"1"))
-        tiers.append('Tier 1')
-    if tier2:
-        df['Tier 2'] = df['max_price'].apply(lambda x: radio_GP(x,"2"))
-        tiers.append('Tier 2')
-    if tier3:
-        df['Tier 3'] = df['max_price'].apply(lambda x: radio_GP(x,"3"))
-        tiers.append('Tier 3')
-    if tier4:
-        df['Tier 4'] = df['max_price'].apply(lambda x: radio_GP(x,"4"))
-        tiers.append('Tier 4')
-    if tier5:
-        df['Tier 5'] = df['max_price'].apply(lambda x: radio_GP(x,"5"))
-        tiers.append('Tier 5')
-    return df,tiers
-
-def highlight_gulong(x):
-    c1 = (x['gulong_price'] != x.max(axis=1))
-    df1 = pd.DataFrame('background-color: ', index=x.index, columns=x.columns)
-    df1['gulong_price']= np.where(c1, 'background-color: {}'.format('pink'), df1['gulong_price'])
+def highlight_promo(xa):
+    list(col_tier).remove('Tier 1')
+    c1 = (xa['promo_price'] > xa[col_tier].min(axis=1))
+    df1 = pd.DataFrame('background-color: ', index=xa.index, columns=xa.columns)
+    df1['promo_price']= np.where(c1, 'background-color: {}'.format('pink'), df1['promo_price'])
     return df1
 
 def highlight_others(x):#cols = ['GP','Tier 1','Tier 3', etc]
-    cols = ['GP']
-    cols.extend(tiers)
     df1 = pd.DataFrame('background-color: ', index=x.index, columns=x.columns)
-    for column in cols: 
-        c = (x[column] > x['gulong_price'])
-        df1[column]= np.where(c, 'color:{};font-weight:{}'.format('red','bold'), df1[column])#.set_index(['make','model'])
+    list(col_tier).remove('Tier 1')
+    for column in col_tier: 
+        c = (x[column] < x['promo_price'])
+        df1[column]= np.where(c, 'color:{};font-weight:{}'.format('red','bold'), df1[column])
     return df1
+
+def df_numeric(df_temp):
+    for cols in df_temp.columns.to_list():
+        df_temp[cols] = pd.to_numeric(df[cols])
+    return df_temp
 
 df_final, supplier_cols = acquire_data()
 
@@ -145,51 +119,78 @@ response = AgGrid(df_show,
     fit_columns_on_grid_load=False
 )
 
+
+
 st.write("Results: "+str(len(df_show))+" entries")
 
 st.markdown("""
             ---
             """)
+            
 st.header("Price Comparison")
 st.write("You may set the GP and the price comparison between models would be shown in a table.")
-c1, cs1,cS, ct1, ct2,ct3,ct4,ct5,cs2 = st.columns([2,2,1,1,1,1,1,1,3])
-with c1:
-    GP = st.number_input("GP (%):",min_value=0.00,max_value = 100.00,
-                              value=25.00, step = 0.01)
-with cS:
-    st.write('Include tier:')
+
+
+c1, ct1, ct2,ct3,ct4,ct5,cS,cs1,cs2, c2= st.columns([0.5,1,1,1,1,1,1,1,1,0.5])
+
+
 with ct1:
-    tier1 = st.checkbox('Tier 1')
+    t1_GP = st.number_input("Tier 1 GP (%):",min_value=0.00,max_value = 100.00,
+                              value=30.00, step = 0.01, key='t1')
+    st.caption('Slashed Prices. \n Not included in comparison.')
 with ct2:
-    tier2 = st.checkbox('Tier 2')
+    t2_GP = st.number_input("GP (%):",min_value=0.00,max_value = 100.00,
+                              value=27.00, step = 0.01, key='t2')
+    st.caption('Actual Website SRP')
 with ct3:
-    tier3 = st.checkbox('Tier 3')
+    t3_GP = st.number_input("GP (%):",min_value=0.00,max_value = 100.00,
+                              value=25.00, step = 0.01, key='t3')
+    st.caption('B2B COD Payment')
 with ct4:
-    tier4 = st.checkbox('Tier 4')
+    t4_GP = st.number_input("GP (%):",min_value=0.00,max_value = 100.00,
+                              value=28.00, step = 0.01, key='t4')
+    st.caption('Marketplace')
 with ct5:
-    tier5 = st.checkbox('Tier 5')
+    t5_GP = st.number_input("GP (%):",min_value=0.00,max_value = 100.00,
+                              value=27.00, step = 0.01, key='t5')
+    st.caption('Affiliates')
+with cS:
+    test_t1 = st.checkbox('Test 1')
+    GP_1 = st.number_input("Test 1 GP (%):",min_value=0.00,max_value = 100.00,
+                              value=25.00, step = 0.01,key='t_1')
+with cs1:
+    test_t2 = st.checkbox('Test 2')
+    GP_2 = st.number_input("Test 2 GP (%):",min_value=0.00,max_value = 100.00,
+                              value=25.00, step = 0.01,key='t_2')
+with cs2:
+    test_t3 = st.checkbox('Test 3')
+    GP_3 = st.number_input("Test 3 GP (%):",min_value=0.00,max_value = 100.00,
+                              value=25.00, step = 0.01,key='t_3')
 
 df = pd.DataFrame.from_dict(response['selected_rows'])
 
-d1, d2,d3 = st.columns([1,4,1])
-with d2:
-    if len(df)>0:
-        df = df.drop('make', axis =1)
-        df = df.set_index('model')
-        df = df.replace('',np.nan).dropna(axis=1, how='all')
-        if 'rowIndex' in df.columns.to_list():
-            df = df.drop('rowIndex', axis =1)
+col_tier_ = ['Tier 1', 'Tier 2','Tier 3','Tier 4', 'Tier 5','Test 1', 'Test 2', 'Test 3']
+col_GP_ = [t1_GP,t2_GP,t3_GP,t4_GP,t5_GP,GP_1,GP_2,GP_3]
+col_mask = [True,True,True,True,True,test_t1, test_t2,test_t3]
+col_tier = list(np.array(col_tier_)[col_mask])
+col_GP = list(np.array(col_GP_)[col_mask])
 
-        df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: round(x.max(),2),axis=1)
-        df['GP'] = df[df.columns.to_list()[-1]].apply(lambda x: consider_GP(x,GP))
-        df,tiers = apply_tier(df)
-        st.dataframe(df.style.apply(highlight_gulong, axis=None)\
-                 .apply(highlight_others,axis=None)\
-                 .format(precision = 2))
-                 #.format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}","Tier 5": "{:.2f}"}))
 
-    else:
-        st.info("Kindly check/select at lease one row above.")
+if len(df)>0:
+    df = df.drop('make', axis =1)
+    df = df.set_index('model')
+    df = df.replace('',np.nan).dropna(axis=1, how='all')
+    if 'rowIndex' in df.columns.to_list():
+        df = df.drop('rowIndex', axis =1)
+    df = df_numeric(df)
+    df['max_price'] = df[df.columns.to_list()[2:]].fillna(0).apply(lambda x: x.max(),axis=1)
+    for c in range(len(col_tier)):
+        df[col_tier[c]] = df['max_price'].apply(lambda x: consider_GP(x,col_GP[c]))
+    st.dataframe(df.style.apply(highlight_promo, axis=None).apply(highlight_others,axis=None).format(precision = 2))
+             #.format(formatter={"max_price": "{:.2f}", "Tier 3": "{:.2f}","Tier 5": "{:.2f}"}))
+
+else:
+    st.info("Kindly check/select at lease one row above.")
 
 st.markdown("""
             ---
@@ -227,34 +228,3 @@ with cB:
         st.experimental_memo.clear()
         df_final = pd.DataFrame()
         supplier_cols = []
-        
-
-
-
-#elif view =='Select by Supplier':
-    
-
-# GP = st.sidebar.number_input("GP (%):",min_value=0.00,max_value = 100.00,
-#                              value=25.00, step = 0.01)
-
-# supplier_list = st.sidebar.multiselect("Select supplier/s", supplier_cols)
-# st.sidebar.write("Include tier:")
-# t1 = st.sidebar.checkbox("Tier 1")
-# t2 = st.sidebar.checkbox("Tier 2")
-# t3 = st.sidebar.checkbox("Tier 3")
-# t4 = st.sidebar.checkbox("Tier 4")
-# t5 = st.sidebar.checkbox("Tier 5")
-
-# st.write()
-
-
-
-
-
-
-
-# cC, cD, cE = st.columns([1, 8, 1])
-# with cD:
-#     if df_final is not None:
-#         raw_container = st.expander('Show uploaded data:')
-#         raw_container.write(df_final)
