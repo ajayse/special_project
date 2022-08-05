@@ -97,11 +97,12 @@ st.write("Select the SKUs that would be considered for the computations.",
          " Feel free to filter the _make_ and _model_ that would be shown. You may also select/deselect columns.")
 
 df_show =df_final[cols].dropna(how = 'all',subset = selected_supplier_,axis=0).fillna(0)
-df_show['max_price'] = df_final[supplier_cols].fillna(0).max(axis=1)
-temp_list = df_show.columns.to_list()
-temp_list = temp_list[:4] + temp_list[-1:]+temp_list[4:-1]
-df_show = df_show[temp_list]
-df_show = df_show.replace(0,'')
+if len(df_show) >0:
+    df_show['max_price'] = df_final[supplier_cols].fillna(0).max(axis=1)
+    temp_list = df_show.columns.to_list()
+    temp_list = temp_list[:4] + temp_list[-1:]+temp_list[4:-1]
+    df_show = df_show[temp_list]
+    df_show = df_show.replace(0,'')
 
 gb = GridOptionsBuilder.from_dataframe(df_show)
 gb.configure_default_column(enablePivot=False, enableValue=False, enableRowGroup=False, editable = True)
