@@ -92,10 +92,15 @@ with st.expander('Include/remove suppliers in list:'):
                                        options = supplier_cols)
 
 cols.extend(selected_supplier_)
+
 st.write("Select the SKUs that would be considered for the computations.",
          " Feel free to filter the _make_ and _model_ that would be shown. You may also select/deselect columns.")
 
 df_show =df_final[cols].dropna(how = 'all',subset = selected_supplier_,axis=0).fillna(0)
+df_show['max_price'] = df_final[supplier_cols].fillna(0).max(axis=1)
+temp_list = df_show.columns.to_list()
+temp_list = temp_list[:4] + temp_list[-1:]+temp_list[4:-1]
+df_show = df_show[temp_list]
 df_show = df_show.replace(0,'')
 
 gb = GridOptionsBuilder.from_dataframe(df_show)
@@ -175,7 +180,9 @@ col_mask = [True,True,True,True,True,test_t1, test_t2,test_t3]
 col_tier = list(np.array(col_tier_)[col_mask])
 col_GP = list(np.array(col_GP_)[col_mask])
 
-
+if len(df) > 3000:
+    st.error("Error. Too many elected rows.")
+    st.stop()
 if len(df)>0:
     df = df.drop('make', axis =1)
     df = df.set_index('model')
