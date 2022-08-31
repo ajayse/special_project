@@ -14,9 +14,17 @@ from sklearn.cluster import KMeans
 
 import plotly.graph_objects as go
 
-
-st.set_page_config(page_icon=":blue_car:", page_title="RFM Analysis")
 pd.options.mode.chained_assignment = None
+
+st.set_page_config(
+    layout = 'wide',
+    page_title='RFM Analysis',
+    page_icon=':tent:',
+    initial_sidebar_state='expanded',
+    menu_items = {
+        'About':"# Thanks for using the app!\n For inquiries, send an email to Arvin Escolano at arvinjayescolano.licagroup@gmail.com."
+        }
+    )
 
 colors = dict({'recency':'honeydew',
               'frequency':'indianred',
@@ -38,16 +46,18 @@ cluster_color = dict({
 # Engagement-https://docs.google.com/spreadsheets/d/1JDdrHrFVvLnjMabaCjj9XYSU5sdrz9-S7pbJWW643pY/edit#gid=1198365844 \\
 # Garage data-http://app.redash.licagroup.ph/queries/99
 
+def convert_df(df):
+    return df.to_csv().encode('utf-8')
 
-@st.cache
-def _gather_data_():
+@st.experimental_memo()
+def get_data():
     df_backend = pd.read_csv("http://app.redash.licagroup.ph/api/queries/112/results.csv?api_key=Tz8lLRHbcyOTGfHprtKqICB8txfFm4mNuNbFWlZF", parse_dates = ['created_at'])
     df_backend = df_backend[['created_at','id', 'product_desc','GarageId','Income','total_price_no_shipping','garage_type']]
     df_backend.columns = ['date', 'id', 'product_desc', 'garage_id', 'income', 'revenue', 'garage_type']
     df_backend['date'] = df_backend['date'].dt.date
     df_backend['garage_type'].loc[df_backend['garage_type']== 'Inactive'] = 'B2C'
     df_backend['garage_type'].loc[df_backend['garage_type']== 'nonlica_delearship'] = 'nonlica_dealership'
-
+    
     #Engagement data
     sheet_id = '1JDdrHrFVvLnjMabaCjj9XYSU5sdrz9-S7pbJWW643pY'
     sheet_name = 'goparts_analysis_website'
@@ -57,14 +67,13 @@ def _gather_data_():
     e_data.columns = ['garage_id','avg_session_duration', 'pageviews_per_session', 'sessions', 'adds_to_cart', 'checkouts']
     e_data['garage_id'] =e_data['garage_id'].astype(int)
     e_data['engagement'] = e_data['avg_session_duration']/e_data['avg_session_duration'].max() + e_data['pageviews_per_session']/e_data['pageviews_per_session'].max() +e_data['sessions']/e_data['sessions'].max() + e_data['adds_to_cart']/e_data['adds_to_cart'].max() + e_data['checkouts']/e_data['checkouts'].max()
-
+    
     #Data for garages
     df_garage = pd.read_csv("http://app.redash.licagroup.ph/api/queries/99/results.csv?api_key=K0xX1pdowwI5Wepot0SUkZqhtnRqpr9bUcqBdiRB")
     df_garage = df_garage[['id','shop_name', 'address']]
     df_garage.columns = ['garage_id', 'shop','location']
     return df_backend,e_data,df_garage
 
-df_backend,e_data,df_garage = _gather_data_()
 
 def grade(rank):
     if rank >0.80:
@@ -114,7 +123,7 @@ def get_rfm(df_input, engagement = False, garage_type = 'all', monetary_column =
   df_out[['recency','frequency', 'monetary_value']] = df_input.groupby('garage_id').agg(
                                                                                         recency = ('date', lambda x: (pd.Timestamp.today().date() - x).min().days -1),
                                                                                         frequency = ('id', lambda x: x.nunique()),
-                                                                                        monetary_value = (monetary_column, lambda x: x.sum())                                                                                        
+                                                                                        monetary_value = (monetary_column, lambda x: round(x.sum(),2))                                                                                        
                                                                                     )
   if engagement:
     df_out = df_out.reset_index().merge(e_data[['garage_id','engagement']], on='garage_id',how= 'left').set_index('garage_id').fillna(0)
@@ -141,7 +150,7 @@ def get_clusters(df_input):
     cluster_centers = np.array([[5,5,5,5],[4,1,3,1],[3,1,1,3],[1,1,1,1]])
   else:
     df_temp = df_input[['R','F', 'M']]
-    cluster_centers = np.array([[5,5,5],[1,3,3],[3,1,1],[1,1,1]])
+    cluster_centers = np.array([[5,5,5],[3,1,1],[1,3,3],[1,1,1]])
   nclusters = len(cluster_centers)
   model = KMeans(n_clusters = nclusters, init= cluster_centers, max_iter = 5000)
   cluster_labels = model.fit_predict(df_temp)
@@ -315,11 +324,14 @@ def stacked_bar_cluster(df_temp):
   fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
   st.plotly_chart(fig)
 
+
+df_backend,e_data,df_garage = get_data()
+
 st.sidebar.header('Parameters for Analysis')
 st.sidebar.text('Select the parameters that would\nbe taken into account during the\nanalysis.')
 garage_type = st.sidebar.selectbox(
     label = 'Select considered garages:',
-    options =(' ','All','Rapide', 'Non-Rapide', 'Non-B2C'))
+    options =('All','Rapide', 'Non-Rapide', 'Non-B2C'))
 engagement = st.sidebar.checkbox(label ="With engagement data.")
 modified = st.sidebar.checkbox(label ="Modified scoring")
 date_start = st.sidebar.date_input(
@@ -405,3 +417,24 @@ elif garage_type!= ' ' and (date_start<date_end):
         df_cluster = df_cluster[['mean_recency','mean_frequency','mean_monetary_value']]
     st.write(df_cluster)
     stacked_bar_cluster(df_rfm.reset_index())
+    
+    st.header("Download data as .csv files")
+    st.text("Click on the download button to save the supporting data for the analysis.")
+    save1, save2, save3 = st.columns(3)
+    with save1:
+        st.download_button(
+            label = "Download clustering results",
+            data = convert_df(df_rfm),
+            file_name="garage_clusters.csv",
+            mime ='text/csv'
+            )  
+        st.caption("Information on the RFM scores and clustering results")
+    with save2:
+        st.download_button(
+            label = "Download cluster data",
+            data = convert_df(df_cluster),
+            file_name="cluster_data.csv",
+            mime ='text/csv'
+            )  
+        st.caption("Summary of RFM parameters per cluster ")
+    
