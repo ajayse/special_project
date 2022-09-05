@@ -376,67 +376,7 @@ def stacked_bar():
   fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
   fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
   st.plotly_chart(fig)
-  
-# def single_demand(item = df[segment].unique()[0]):
-#   fig = go.Figure()
-
-#   # Add traces
-
-#   fig.add_trace(go.Bar(x=df_data.index, 
-#         y=df_data[item],
-#         marker_color = find_color(item),
-#         hovertext = find_class(item),
-#         textposition = 'outside',
-#         text = df_data[item],
-#         name = f"{item}" + "("+find_class(item)+")")
-#   )
-#   fig.add_trace(go.Scatter(
-#       x=df_data.index,
-#       y=[df_data[item].mean(axis=0)]*len(df_data.index),
-#       mode = 'lines',
-#       line =dict(
-#           dash='dash',
-#           color = 'red'
-#       ),
-#       name= 'Average quantity sold per time interval'
-#   )
-      
-#   )
-#   fig.update_layout(
-#       title_text="Demand Chart for "+f"<b>{item}</b>", 
-#       plot_bgcolor='white',
-#       xaxis = dict(
-#           title_text="<b>Date </b>", 
-#           linewidth = 0.1,
-#           mirror = True,
-#           showline=True,
-#           ticks = 'inside',
-#       ),
-#       yaxis = dict(
-#           title_text="<b>Quantity </b>",
-#           gridcolor = 'LightGrey',
-#           linewidth = 0.1,
-#           mirror = True,
-#           showline= True,
-#           ticks = 'inside',
-#       )
-#   )
-
-#   fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
-#   fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
-
-#   st.plotly_chart(fig)
-#   info_summary =dict(
-#       classification =find_class(item),    
-#       consumption_value_PHP =df_summary.loc[item]['cvalue'],
-#       variation_coefficient =df_summary.loc[item]['cv'],
-#       average_quantity = df_summary.loc[item]['mean'],
-#       total_quantity =df_summary.loc[item]['quantity']
-#   )
-#   results = pd.DataFrame([info_summary],index =[item]).transpose()
-#   results = results.dtypes.astype(str)
-#   st.write(results)
-  
+    
 def single_avgdemand(item):
   container = st.container()
 
@@ -444,27 +384,27 @@ def single_avgdemand(item):
   df_temp =df_temp.loc[df_temp[segment]==item][['date','quantity']]
   df_forplot = df_temp.groupby(pd.Grouper(freq=date_interval, key='date'))['quantity'].describe().fillna(0)
   fig = go.Figure()
-  # Add traces
-  
-  if platform =='Carmax':
-      y_0 = df_forplot['count']
-      
-  else:
-      y_0 = df_forplot['mean']
   fig.add_trace(go.Bar(
         x=df_forplot.index,
-        y=y_0,
+        y=df_forplot['count']*df_forplot['mean'],
         marker_color = find_color(item),
+        hovertext = df_forplot.apply(lambda x: 'Total: '+str((x['count']*x['mean']).astype(int)) +'<br>'+
+                                    'Classification: '+str(find_class(item)), axis=1),
+        text = df_forplot['count']* df_forplot['mean'],
+        textposition='outside',
+        name= 'Total Quantity'))
+  fig.add_trace(go.Scatter(
+        x=df_forplot.index,
+        y=df_forplot['mean'].apply(lambda x: round(x)),
+        mode = 'lines+markers',
         error_y = dict(
             type='data',
             array = df_forplot['std'],
             visible=True
         ),
-        hovertext = df_forplot.apply(lambda x: 'Total: '+str((x['count']*x['mean']).astype(int)) +'<br>'+
-                                    'Classification: '+str(find_class(item)), axis=1),
-        text = y_0.round(2),
-        textposition='outside',
-        name= 'Average quantity sold per time interval'))
+        #hovertext = df_forplot.apply(lambda x: 'Average'+str(round(x['mean'],2)) +str(round(df_forplot['std'],2), axis=1)),
+        text = df_forplot['count'],
+        name= 'Average order count'))
   fig.update_layout(
       title_text="Demand Chart for "+f"<b>{item}</b>("+find_class(item)+")", 
       plot_bgcolor='white',
@@ -486,7 +426,7 @@ def single_avgdemand(item):
   )
 
   fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
-  fig.update_yaxes(showline=True, linewidth=1, linecolor='black', range =[0,y_0.max()+df_forplot['std'].max()],fixedrange=True, mirror=True)
+  fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
 
   container.plotly_chart(fig)
   #summary df
