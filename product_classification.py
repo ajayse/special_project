@@ -324,23 +324,20 @@ def plot_pareto():
   st.plotly_chart(fig)
   
 def stacked_bar():
-  fig_element = []
-  for item in df_data.columns:
-    fig_element.append(
-        go.Bar(name=f"{item}"+"("+find_class(item)+")", 
-                x=df_data.index, 
-                y=df_data[item], 
-                marker=dict(
-                    colorscale="Cividis"
-                    )
-                #text=df_data[item],
-                #textposition = 'inside'
-                ))
-
-  fig = go.Figure(
-      data=fig_element
-  )
-  fig.add_trace(
+    container = st.container()
+    fig = go.Figure()
+    for item in df_data.columns:
+      fig.add_trace(go.Bar(name=f"{item}"+"("+find_class(item)+")", 
+                  x=df_data.index, 
+                  y=df_data[item], 
+                  marker=dict(
+                      colorscale="Cividis"
+                      )
+                  #text=df_data[item],
+                  #textposition = 'inside'
+                  ))
+  
+    fig.add_trace(
       go.Scatter(name='total', 
               mode = 'markers',
               marker =dict(size = 0.01),
@@ -349,33 +346,33 @@ def stacked_bar():
               text=df_data.sum(axis=1),
               #colorscale="Cividis"
               )
-  )
-  # Change the bar mode
-  fig.update_layout(barmode='stack')
-
-  fig.update_layout(
-      title_text="Demand Chart", 
-      plot_bgcolor='white',
-      xaxis = dict(
-          title_text="<b>Date </b>", 
-          linewidth = 0.1,
-          mirror = True,
-          showline=True,
-          ticks = 'inside',
-      ),
-      yaxis = dict(
-          title_text="<b>Quantity </b>",
-          gridcolor = 'LightGrey',
-          linewidth = 0.1,
-          mirror = True,
-          showline= True,
-          ticks = 'inside',
-      )
-  )
-
-  fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
-  fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
-  st.plotly_chart(fig)
+    )
+    # Change the bar mode
+    fig.update_layout(barmode='stack')
+    
+    fig.update_layout(
+        title_text="Demand Chart", 
+        plot_bgcolor='white',
+        xaxis = dict(
+            title_text="<b>Date </b>", 
+            linewidth = 0.1,
+            mirror = True,
+            showline=True,
+            ticks = 'inside',
+        ),
+        yaxis = dict(
+            title_text="<b>Quantity </b>",
+            gridcolor = 'LightGrey',
+            linewidth = 0.1,
+            mirror = True,
+            showline= True,
+            ticks = 'inside',
+        )
+    )
+    
+    fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
+    fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
+    container.plotly_chart(fig)
     
 def single_avgdemand(item):
   container = st.container()
@@ -445,6 +442,8 @@ def single_avgdemand(item):
 def convert_df(df):
     return df.to_csv().encode('utf-8')
 
+selection = st.sidebar.selectbox('Select Segment:',('Pareto', 'Segment Demand','Overall Data', 'Filter Selection', 'All'))
+
 time_interval = st.sidebar.radio(
      "Select date interval:",
      ('Monthly', 'Weekly', 'Daily'))
@@ -495,39 +494,58 @@ elif (date_start>date_end):
                 """)   
     st.title("Please indicate a valid date interval.")
 
+
+
 elif began ==1 and (date_start<date_end):
     st.title("Inventory Classification for "+platform+" by " + time_interval+" Demand per "+segment_i+" based on **ABC**-**XYZ** Classification")
     segment = segment_dict[segment_i]
     df_input = df.loc[df['date'] > np.datetime64(date_start)].loc[df['date']< np.datetime64(date_end)]
     df_data, df_summary = get_data(df_input,segment,date_interval)
-    intro_text = st.container()
-    pareto_text = st.container()
-    plot_pareto()
-    sbar_text = st.container()
-    stacked_bar()
+    #intro_text = st.container()
     
-    st.header('Demand per '+segment_i+":")
-
-    item_i = st.selectbox(
-        label = 'Select '+segment_i+' to view its '+time_interval.lower()+' demand:',
-        options =tuple(df_summary.index)
-        )
-    single_avgdemand(item =item_i)
-    avgdemand_text = st.container()
+    pareto = st.empty()
+    with pareto.container():
+        #pareto_text = st.container()
+        plot_pareto()
+    if selection != 'Pareto' and selection != 'All':
+        pareto.empty()
         
-    df_final=df_summary.reset_index().groupby('class').agg(
-                                segment_count=(segment, lambda x: x.nunique()),
-                                total_demand=('quantity', lambda x: int(x.sum())),
-                                avg_demand=('quantity', lambda x:int(x.mean())),
-                                total_profit=('cvalue', lambda x: round(x.sum(),2)),
-                                members = (segment,lambda x: ', '.join(x.unique())),
-        )
-    results_text = st.container()
-    st.dataframe(df_final)
+    single_demand = st.empty()
+    with single_demand.container():
+        st.header('Demand per '+segment_i+":")
     
+        item_i = st.selectbox(
+            label = 'Select '+segment_i+' to view its '+time_interval.lower()+' demand:',
+            options =tuple(df_summary.index)
+            )
+        single_avgdemand(item =item_i)
+        #avgdemand_text = st.container()
+    if (selection != 'Segment Demand') and (selection != 'All'):
+        single_demand.empty()
     
-    with st.container():
-        classifications_text = st.container()
+    overall = st.empty()
+    with overall.container():
+        #sbar_text = st.container()
+        df_all_show = df_summary[['class','cvalue', 'quantity', 'cv']].copy()
+        df_all_show.columns = ['Classification', 'Profit (PHP)', 'Quantity Sold (units)', 'Coefficient of Variation']
+        st.dataframe(df_all_show)
+        stacked_bar() 
+        df_final=df_summary.reset_index().groupby('class').agg(
+                                    segment_count=(segment, lambda x: x.nunique()),
+                                    total_demand=('quantity', lambda x: int(x.sum())),
+                                    avg_demand=('quantity', lambda x:int(x.mean())),
+                                    total_profit=('cvalue', lambda x: round(x.sum(),2)),
+                                    members = (segment,lambda x: ', '.join(x.unique())),
+            )
+        #results_text = st.container()
+        st.dataframe(df_final)
+    if (selection != 'Overall Data') and (selection != 'All'):
+        overall.empty()
+    
+    classify = st.empty()
+    with classify.container():
+        #classifications_text = st.container()
+        temp = st.container()
         st.text('All classifications:')
         ax, ay, az = st.columns(3)
         with ax:
@@ -589,21 +607,18 @@ elif began ==1 and (date_start<date_end):
             df_show = df_summary[df_summary['class'].isin(class_elements[data_filter])][['class','cvalue','quantity']]
             df_show.columns = ['Classification','Profit (PHP)','Quantity Sold (units)']
             if len(df_show) >0:
-                st.dataframe(df_show)
+                temp.dataframe(df_show)
             else:
                 st.write('No items are included.')
         else:
             st.write('Include at least 1 classification above.')
-    
-    
-    with st.expander('All data:'):
-        df_all_show = df_summary[['class','cvalue', 'quantity', 'cv']].copy()
-        df_all_show.columns = ['Classification', 'Profit (PHP)', 'Quantity Sold (units)', 'Coefficient of Variation']
-        st.dataframe(df_all_show)
+    if (selection != 'Filter Selection') and (selection != 'All') :
+        classify.empty()
+        
      
     st.header("Download data as .csv files")
     st.text("Click on the download button to save the supporting data for the analysis.")
-    save1, save2, save3 = st.columns(3)
+    save1, save2, save3 = st.columns([1,1,1])
     with save1:
         st.download_button(
             label = "Download results",
@@ -631,18 +646,18 @@ elif began ==1 and (date_start<date_end):
         
 
         
-    intro_text.write("**Introduction**")
-    intro_text.write("The ABC-XYZ is a paired classification for inventory itmes that would describe the importance of the "+segment_i+" to the business and and its variablity in demand. The **ABC classification** classifies a "+segment_i+" based on its contribution in profit. On the other hand, the **XYZ-classification** describes the variability in demand with respect to the coefficient of variation on its "+time_interval.lower()+" demand. The analysis below reflects the relevant information that would potentially help us in managing the inventory.")
-    pareto_text.header('Pareto Analysis')
-    pareto_text.write(
-        "The pareto chart for the analysis is shown below. The bar plot corresponds to the consumption value (profit) in PHP represents the contribution of each "+segment_i.lower()+". On the other hand, the line plot shows the cumulattive percentage of the consumption value as we rank the decreasing consumption value of each segment. The most valueable items of the segment is constituted by the items that compose 80% of the total income, which we classify as A (highlighted as green)."+ 
-        "Now, the other componenets that constitute up to 95% of the income would be classified as B (highlighted as yellow), while the rest are classified as C (highlighted as red)."
-                      )
-    sbar_text.header('Overall Demand')
-    sbar_text.write(
-        "The demand for each "+segment_i.lower()+" is shown below."
-        )
-    avgdemand_text.write('The average '+time_interval+' demand for '+item_i+' is shown above. We can see that the **XYZ** classification would tell how the demand for the respective '+segment_i+' would vary across time. Moreover, the errorbars would indicate its variation per order at any given time over the indicated time interval. This would provide us with some insight on how we can manage the stock and lay out expectations on what would be its demand.')
-    results_text.header("Results")
-    results_text.text('The summary of relevant parameters per each classifcation is shown below. The count, total demand, average demand, total profit, and the respective '+segment_i+' that falls into each product classification are summarized in the given table. The descriptions for the respective classifications are shown further below')
+    #intro_text.write("**Introduction**")
+    #intro_text.write("The ABC-XYZ is a paired classification for inventory itmes that would describe the importance of the "+segment_i+" to the business and and its variablity in demand. The **ABC classification** classifies a "+segment_i+" based on its contribution in profit. On the other hand, the **XYZ-classification** describes the variability in demand with respect to the coefficient of variation on its "+time_interval.lower()+" demand. The analysis below reflects the relevant information that would potentially help us in managing the inventory.")
+    #pareto_text.header('Pareto Analysis')
+    #pareto_text.write(
+        # "The pareto chart for the analysis is shown below. The bar plot corresponds to the consumption value (profit) in PHP represents the contribution of each "+segment_i.lower()+". On the other hand, the line plot shows the cumulattive percentage of the consumption value as we rank the decreasing consumption value of each segment. The most valueable items of the segment is constituted by the items that compose 80% of the total income, which we classify as A (highlighted as green)."+ 
+        # "Now, the other componenets that constitute up to 95% of the income would be classified as B (highlighted as yellow), while the rest are classified as C (highlighted as red)."
+        #               )
+    #sbar_text.header('Overall Demand')
+    #sbar_text.write(
+        # "The demand for each "+segment_i.lower()+" is shown below."
+        # )
+    #avgdemand_text.write('The average '+time_interval+' demand for '+item_i+' is shown above. We can see that the **XYZ** classification would tell how the demand for the respective '+segment_i+' would vary across time. Moreover, the errorbars would indicate its variation per order at any given time over the indicated time interval. This would provide us with some insight on how we can manage the stock and lay out expectations on what would be its demand.')
+    #results_text.header("Results")
+    #results_text.text('The summary of relevant parameters per each classifcation is shown below. The count, total demand, average demand, total profit, and the respective '+segment_i+' that falls into each product classification are summarized in the given table. The descriptions for the respective classifications are shown further below')
     
