@@ -2,13 +2,15 @@
 """
 @author: Arvin Jay
 """
-
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from scipy import stats
+import datetime as dt
 pd.options.mode.chained_assignment = None
+pd.options.display.float_format = '${:,.2f}'.format
 
 st.set_page_config(
     layout = 'wide',
@@ -19,6 +21,7 @@ st.set_page_config(
         'About':"# Thanks for using the app!\n For inquiries, send an email to Arvin Escolano at arvinjayescolano.licagroup@gmail.com."
         }
     )
+st.header("Product Classification (ABC-XYZ Analysis)")
 st.sidebar.header("Data Controls")
 
 if st.sidebar.button('Update Data'):
@@ -26,14 +29,15 @@ if st.sidebar.button('Update Data'):
     df_data = pd.DataFrame()
     df_summary = pd.DataFrame()
     
-    
-began = 0
 
+platform = st.sidebar.selectbox('Platform:', options = ('Gulong', 'Carmax', 'GoParts'), key = 'platform')
 st.sidebar.header('Parameters for Analysis')
 st.sidebar.text('Select the parameters that would\nbe taken into account during the\nanalysis.')
-platform = st.sidebar.selectbox(
-    label = 'Select Platform:',
-    options =('Gulong.ph', 'GoParts','Carmax'))
+if 'platform' in st.session_state:
+    platform =st.session_state['platform']
+else:
+    st.error("""Error input platform, please restart the application or contact Arvin Escolano.""")
+    st.stop()
 
 category_dict = {"bulbs":"Accessories","car care combiset":"Accessories","early warning device":"Accessories",
               "universal horn": "Accessories","wipers":"Accessories","air filter":"Air Induction & Exhaust",
@@ -66,92 +70,81 @@ to_fix_brand= { "Vortex":"Vortex Plus", "VortexPlus":"Vortex Plus", "Wiper":"ACD
                "Oem":"OEM Engineering","Usa":"USA88", "Powerplus":"Power Plus","Federal":"Federal Mogul"}
 
 @st.experimental_memo
-def acquire_data_carmax():
-    all_data = pd.read_csv("http://app.redash.licagroup.ph/api/queries/7/results.csv?api_key=sSt3ILBkdxIbOFC5DqmQxQhBq7SiiKVZBc8FBtei", parse_dates=['Date Sold'])
-    all_data = all_data.loc[all_data['Current Status']=='Sold'][['Date Sold','Make', 'Model',
-           'Year', 'Transmission', 'Fuel Type', 'Mileage', 'Color', 'Vehicle Type',
-           'Variant', 'Ownership', 'Saleability','GP/Books']]
-    all_data.columns = ['date','Make', 'Model',
-           'Year', 'Transmission', 'Fuel Type', 'Mileage', 'Color', 'Vehicle Type',
-           'Variant', 'Ownership', 'Saleability','consumption_value']
-    all_data['Make'] = all_data['Make'].apply(lambda x: x.strip()).str.upper()
-    all_data['Model'] = all_data['Model'].apply(lambda x: x.strip()).str.upper()
-    
-    correct_model = ['ALMERA','ALTERRA','CIVIC','CR-V', 'FUZION','HILUX' ,'HR-V','I 10','MUX','SANTA FE', 'SANTA FE','SANTA FE','SONIC','VIEW','CBR','EON','INNOVA', 'TOWN AND COUNTRY','ZS', 'X3', 'MONTERO SPORT','RAV 4','X-TRAIL','3','CBR', 'BR-V']
-    error_model = ['ALMERS','ALTERA','CIVIC`','CRV', 'FUSION', 'HI-LUX','HRV','I10','MU-X','SANTAFE','STA FE', 'STA. FE','SONIC SEDAN','VIEW VAN','CBR 594 6 SPEED','EON MT GAS','INNOVA G','TOWN & COUNTRY','ZS STYLE', 'BMW X3','MONTERO SPORTS','RAV4','XTRAIL','MAZDA 3','CBR 954 6 SPEED','BRV']
-    correct_dict = dict(zip(error_model, correct_model))
-    for e_model in error_model:
-      all_data.loc[all_data['Model'] ==e_model,'Model'] = correct_dict[e_model]
-    all_data['CAR'] = all_data[['Make','Model']].apply(lambda x: x['Make']+' '+x['Model'],axis=1)
-    all_data['Year/Model'] = all_data['Year'].astype(str) + '/'+all_data['Model']
-    all_data['quantity'] = 1
-    return all_data
+def acquire_data(platform):
+    if platform == 'Gulong':
+        segment ='make'
+        segment_i = ('SKU','Brand','Dimension','Customer type')
+        segment_dict = {'Brand': 'make',
+            'SKU' : 'model',
+            'Dimension' : 'dimensions',
+            'Customer type':'customer_type'
+            }
+        df_raw = pd.read_csv('http://app.redash.licagroup.ph/api/queries/104/results.csv?api_key=YqUI9o2bQn7lQUjlRd9gihjgAhs8ls1EBdYNixaO',parse_dates = ['date','date_updated','pickup_date','delivery_date','date_supplied','date_received_by_branch','date_released','date_fulfilled_a'], index_col='id')
+        df_raw = df_raw[~df_raw.index.duplicated(keep='first')]
+        df_f = df_raw.loc[df_raw.status == 'fulfilled'].copy()
+        df_f['consumption_value'] = df_f['price'] * df_f['quantity']
+        types = df_f['tire_type'].dropna().unique().tolist()
+        customers = df_f['customer_type'].dropna().unique().tolist()
+        return df_f, segment,segment_i, segment_dict, types,customers
+    elif platform == 'GoParts':
+        segment ='brand'
+        segment_i =('SKU', 'Product category', 'Brand','Category per Brand')
+        segment_dict = {'SKU': 'product_desc',
+            'Product category' : 'product_category',
+            'Brand' : 'brand',
+            'Category per Brand' :'brand_category'
+            }
+        df_raw = pd.read_csv("http://app.redash.licagroup.ph/api/queries/118/results.csv?api_key=nVfPq3pxbOF6uSWOlCI8HQSRmgMb34OD6tWvrapY", parse_dates = ['created_at'])
+        df_raw = df_raw.loc[df_raw['quantity']>0]
+        df_raw = df_raw.drop(df_raw[df_raw.price < 0].index)
+        df_raw = df_raw.loc[:,['id', 'created_at','GarageId','product_desc', 'garage_type', 'brand', 'category_name','quantity','price','Income','product cost']]
+        df_raw.columns = ['id', 'date','garage_id','product_desc', 'garage_type', 'brand', 'category_name','quantity','price','consumption_value','cost']
+        df_raw['garage_type'].loc[df_raw['garage_type'] == 'nonlica_delearship'] = 'nonlica_dealership'
+        df_raw['garage_type'].loc[df_raw['garage_type'] == 'Inactive'] = 'B2C'
+        df_raw.loc[df_raw.category_name.isnull(),'brand'] = df_raw.loc[:,'product_desc'].apply(lambda x:x.split(" ")[0])
+        df_raw.loc[df_raw.category_name.isnull(),'category_name'] = df_raw.loc[df_raw.category_name.isnull(),'brand'].apply(lambda x: to_fix_category_name[x])
+        df_raw.loc[df_raw['brand'].isin(list(to_fix_brand.keys())),'brand'] = df_raw.loc[df_raw['brand'].isin(list(to_fix_brand.keys())),'brand'].apply(lambda x: to_fix_brand[x])
+        df_raw['product_category'] = df_raw['category_name'].apply(lambda x: category_dict[x])
+        df_raw['brand_category'] = [str(x) + ' '+str(y).title() for (x,y) in zip(df_raw['brand'], df_raw['product_category'])]
+        types = df_raw['garage_type'].dropna().unique().tolist()
+        customers = list()
+        return df_raw, segment,segment_i, segment_dict, types,customers
+    elif platform == 'Carmax':
+        segment ='Car'
+        segment_i =('Car', 'Year/Model', 'Make','Type')
+        segment_dict = {'Car': 'CAR',
+            'Year/Model' : 'Year/Model',
+            'Make' : 'Make',
+            'Type' :'Vehicle Type'
+            }
+        all_data = pd.read_csv("http://app.redash.licagroup.ph/api/queries/7/results.csv?api_key=sSt3ILBkdxIbOFC5DqmQxQhBq7SiiKVZBc8FBtei", parse_dates=['Date Sold'])
+        all_data = all_data.loc[all_data['Current Status']=='Sold'][['Date Sold','Make', 'Model',
+               'Year', 'Transmission', 'Fuel Type', 'Mileage', 'Color', 'Vehicle Type',
+               'Variant', 'Ownership', 'Saleability','GP/Books']]
+        all_data.columns = ['date','Make', 'Model',
+               'Year', 'Transmission', 'Fuel Type', 'Mileage', 'Color', 'Vehicle Type',
+               'Variant', 'Ownership', 'Saleability','consumption_value']
+        all_data['Make'] = all_data['Make'].apply(lambda x: x.strip()).str.upper()
+        all_data['Model'] = all_data['Model'].apply(lambda x: x.strip()).str.upper()
+        
+        correct_model = ['ALMERA','ALTERRA','CIVIC','CR-V', 'FUZION','HILUX' ,'HR-V','I 10','MUX','SANTA FE', 'SANTA FE','SANTA FE','SONIC','VIEW','CBR','EON','INNOVA', 'TOWN AND COUNTRY','ZS', 'X3', 'MONTERO SPORT','RAV 4','X-TRAIL','3','CBR', 'BR-V']
+        error_model = ['ALMERS','ALTERA','CIVIC`','CRV', 'FUSION', 'HI-LUX','HRV','I10','MU-X','SANTAFE','STA FE', 'STA. FE','SONIC SEDAN','VIEW VAN','CBR 594 6 SPEED','EON MT GAS','INNOVA G','TOWN & COUNTRY','ZS STYLE', 'BMW X3','MONTERO SPORTS','RAV4','XTRAIL','MAZDA 3','CBR 954 6 SPEED','BRV']
+        correct_dict = dict(zip(error_model, correct_model))
+        for e_model in error_model:
+          all_data.loc[all_data['Model'] ==e_model,'Model'] = correct_dict[e_model]
+        all_data['CAR'] = all_data[['Make','Model']].apply(lambda x: x['Make']+' '+x['Model'],axis=1)
+        all_data['Year/Model'] = all_data['Year'].astype(str) + '/'+all_data['Model']
+        all_data['quantity'] = 1
+        types = list()
+        customers = list
+        return all_data, segment,segment_i, segment_dict, types,customers
+    else:
+        st.error("""Error input platform, please restart the application or contact Arvin Escolano.""")
+        st.stop()
 
-@st.experimental_memo
-def acquire_data_gulong():
-    df_raw = pd.read_csv('http://app.redash.licagroup.ph/api/queries/104/results.csv?api_key=YqUI9o2bQn7lQUjlRd9gihjgAhs8ls1EBdYNixaO',parse_dates = ['date','date_updated','pickup_date','delivery_date','date_supplied','date_received_by_branch','date_released','date_fulfilled_a'], index_col='id')
-    df_raw = df_raw[~df_raw.index.duplicated(keep='first')]
-    df_f = df_raw.loc[df_raw.status == 'fulfilled'].copy()
-    df_f['consumption_value'] = df_f['price'] * df_f['quantity']
-    return df_f
+df, segment,segment_choices, segment_dict,types,customers =acquire_data(platform)
 
-@st.experimental_memo
-def acquire_data_goparts():
-    # all_data = pd.read_csv("http://app.redash.licagroup.ph/api/queries/118/results.csv?api_key=nVfPq3pxbOF6uSWOlCI8HQSRmgMb34OD6tWvrapY", parse_dates=['created_at'])
-    # all_data = all_data.drop(all_data[all_data.price < 0].index)
-    # all_data['garage_type'].loc[all_data['garage_type'] == 'nonlica_delearship'] = 'nonlica_dealership'
-    # all_data['garage_type'].loc[all_data['garage_type'] == 'Inactive'] = 'B2C'
-    # df = all_data[['id', 'GarageId', 'garage_type', 'created_at', 'product cost','price','quantity','Income','total_price_no_shipping','product_id','product_desc','category_name','brand']].copy()
-    # df.columns = ['id', 'garage_id', 'garage_type', 'date', 'cost','price','quantity','consumption_value','total_price_no_shipping','product_id','product_desc','category_name','brand']
-    # df['brand_category'] = df['brand'] +'_'+df['category_name']
-    # df = df.loc[df['consumption_value']>0]
-    # return df
-    df_raw = pd.read_csv("http://app.redash.licagroup.ph/api/queries/118/results.csv?api_key=nVfPq3pxbOF6uSWOlCI8HQSRmgMb34OD6tWvrapY", parse_dates = ['created_at'])
-    df_raw = df_raw.loc[df_raw['quantity']>0]
-    df_raw = df_raw.drop(df_raw[df_raw.price < 0].index)
-    df_raw = df_raw.loc[:,['id', 'created_at','GarageId','product_desc', 'garage_type', 'brand', 'category_name','quantity','price','Income','product cost']]
-    df_raw.columns = ['id', 'date','garage_id','product_desc', 'garage_type', 'brand', 'category_name','quantity','price','consumption_value','cost']
-    df_raw['garage_type'].loc[df_raw['garage_type'] == 'nonlica_delearship'] = 'nonlica_dealership'
-    df_raw['garage_type'].loc[df_raw['garage_type'] == 'Inactive'] = 'B2C'
-    df_raw.loc[df_raw.category_name.isnull(),'brand'] = df_raw.loc[:,'product_desc'].apply(lambda x:x.split(" ")[0])
-    df_raw.loc[df_raw.category_name.isnull(),'category_name'] = df_raw.loc[df_raw.category_name.isnull(),'brand'].apply(lambda x: to_fix_category_name[x])
-    df_raw.loc[df_raw['brand'].isin(list(to_fix_brand.keys())),'brand'] = df_raw.loc[df_raw['brand'].isin(list(to_fix_brand.keys())),'brand'].apply(lambda x: to_fix_brand[x])
-    df_raw['product_category'] = df_raw['category_name'].apply(lambda x: category_dict[x])
-    df_raw['brand_category'] = [str(x) + ' '+str(y).title() for (x,y) in zip(df_raw['brand'], df_raw['product_category'])]
-    return df_raw
-    
-if platform == 'Gulong.ph':
-    df = acquire_data_gulong()
-    segment ='make'
-    segment_i = st.sidebar.selectbox(
-        label = 'Product Segmentation:',
-        options =('','Brand', 'SKU', 'Dimensions'))
-    segment_dict = {'Brand': 'make',
-        'SKU' : 'model',
-        'Dimensions' : 'dimensions'
-        }
-elif platform == 'GoParts':
-    df = acquire_data_goparts()
-    segment ='brand'
-    segment_i = st.sidebar.selectbox(
-        label = 'Product Segmentation:',
-        options =('','SKU', 'Product category', 'Brand','Category per Brand'))
-    segment_dict = {'SKU': 'product_desc',
-        'Product category' : 'product_category',
-        'Brand' : 'brand',
-        'Category per Brand' :'brand_category'
-        }
-elif platform == 'Carmax':
-    df = acquire_data_carmax()
-    segment ='Car'
-    segment_i = st.sidebar.selectbox(
-        label = 'Product Segmentation:',
-        options =('','Car', 'Year/Model', 'Make','Type'))
-    segment_dict = {'Car': 'CAR',
-        'Year/Model' : 'Year/Model',
-        'Make' : 'Make',
-        'Type' :'Vehicle Type'
-        }
+
 
 def get_abc(i_rank):
   '''
@@ -188,7 +181,7 @@ def get_xyz(data, CV = True):
   return val
 
 def find_class(item):
-  return df_summary.loc[item]['class']
+  return df_summary.loc[item]['class_']
 
 def find_xyz(item):
   return df_summary.loc[item]['XYZ']
@@ -201,11 +194,22 @@ def find_color(item):
   elif find_xyz(item) =='Z':
     return '#800080'
 
+
+def class_slope(slope):
+  val = ''
+  if slope > 0.0075:
+    val = '+'
+  elif slope < -0.0075:
+    val = '-'
+  return val
+
 def get_data(df_input,segment,date_interval):
   df_xyz = pd.DataFrame()
   df_data = df_input.groupby([pd.Grouper(freq = date_interval, key='date'), segment])['quantity'].sum().fillna(0).unstack().reset_index()
   df_data['date'] = df_data['date'].apply(lambda x: x.date())
   df_data = df_data.set_index('date')
+  #slope, intercept, r_value, p_value, std_err = stats.linregress(df['date'], df['quantity'])
+
   df_d = df_data.describe().loc[['count','mean','std','min','max']]
   df_temp =df_data.copy()
   t_time = len(df_temp)
@@ -214,8 +218,10 @@ def get_data(df_input,segment,date_interval):
   df_xyz['XYZ_cv'] =df_xyz['cv'].apply(get_xyz)
   df_xyz['XYZ_p'] =  df_xyz['p'].apply(lambda x: get_xyz(x,False))
   df_xyz['XYZ'] = df_xyz[['XYZ_cv','XYZ_p']].max(axis = 1)
+  df_xyz = df_xyz.drop(columns = ['XYZ_cv','XYZ_p'])
 
   df_xyz.index.name = segment
+
   df_data_abc = pd.DataFrame()
   df_data_abc[['cvalue','quantity']] = df_input.groupby(segment).agg(
                                                         cvalue =('consumption_value', lambda x: x.sum()),
@@ -227,14 +233,31 @@ def get_data(df_input,segment,date_interval):
   df_abc = df_abc.sort_values(by='ABC',ascending = True)
   df_abc.index.name = segment
 
+  df_data_ = df_data.reset_index().copy()
+  df_data_['date_ordinal'] = pd.to_datetime(df_data_['date']).map(dt.datetime.toordinal)
+  index_list = []
+  slope_list = []
+  r_list = []
+  for seg in df_data.columns:
+    slope, intercept, r_value, p_value, std_err = stats.linregress(df_data_['date_ordinal'],df_data_[seg].fillna(0))
+    index_list.append(seg)
+    slope_list.append(slope)
+    r_list.append((r_value**2))
+  d = {'slope':slope_list,
+       'r':r_list}
+  df_data_slope = pd.DataFrame(data = d, index = index_list)
+
   df_summary = pd.DataFrame()
-  df_summary = pd.concat([df_xyz, df_abc], axis=1)
-  df_summary = df_summary[['ABC', 'XYZ', 'cvalue','quantity', 'cv','p']].sort_values(by='cvalue', ascending=False)
+  df_summary = pd.concat([df_xyz, df_abc,df_data_slope], axis=1)
+  df_summary = df_summary[['ABC', 'XYZ', 'cvalue','quantity', 'cv','p','slope']].sort_values(by='cvalue', ascending=False)
   df_summary['cv'] =df_summary['cv'].fillna(9.99)
   df_summary['XYZ'] =df_summary['XYZ'].fillna('Z')
+  df_summary['s'] = df_summary['slope'].apply(class_slope)
   df_summary['cumulative_pct'] = round((100*df_summary['cvalue']/df_summary['cvalue'].sum()).cumsum(),2)
-  df_summary = pd.merge(left =df_summary,right=df_d.transpose(),on=segment)
+  df_summary = pd.concat([df_summary,df_d.transpose()],axis=1)#(left =df_summary,right=df_d.transpose(),on=segment)
   df_summary['class']= df_summary['ABC']+df_summary['XYZ']
+  df_summary['class_']= df_summary['ABC']+df_summary['XYZ']+df_summary['s']
+  df_summary.index.name = segment
 
   return df_data, df_summary
 
@@ -324,86 +347,59 @@ def plot_pareto():
   st.plotly_chart(fig)
   
 def stacked_bar():
-    container = st.container()
-    fig = go.Figure()
-    for item in df_data.columns:
-      fig.add_trace(go.Bar(name=f"{item}"+"("+find_class(item)+")", 
-                  x=df_data.index, 
-                  y=df_data[item], 
-                  marker=dict(
-                      colorscale="Cividis"
-                      )
-                  #text=df_data[item],
-                  #textposition = 'inside'
-                  ))
+  fig_element = []
+  df_data_ = df_data.copy()
   
-    fig.add_trace(
+  cA,cB,cC = st.columns([1,1,1])
+  with cA:
+      ABC = st.multiselect('Select category (ABC):',
+                           options=['A','B','C'],
+                           default=['A'])
+  with cB:
+      XYZ = st.multiselect('Select category (XYZ):',
+                           options=['X','Y','Z'],
+                           default=['X'])
+  with cC:
+      s = st.multiselect('Select category (XYZ):',
+                           options=['+','-',''],
+                           default=['+','-',''])
+  df_temp = df_summary.copy()
+  if ABC != 'All':
+      df_temp = df_temp.loc[df_summary['ABC'].isin(ABC)]
+  if XYZ != 'All':
+      df_temp = df_temp.loc[df_summary['XYZ'].isin(XYZ)]
+  if s != s:
+      df_temp = df_temp.loc[df_summary['s'].isin(s)]
+  for item in df_temp.index.tolist():
+    fig_element.append(
+        go.Bar(name=f"{item}"+"("+find_class(item)+")", 
+                x=df_data_.index, 
+                y=df_data_[item], 
+                marker=dict(
+                    colorscale="Cividis"
+                    )
+                #text=df_data[item],
+                #textposition = 'inside'
+                ))
+
+  fig = go.Figure(
+      data=fig_element
+  )
+  fig.add_trace(
       go.Scatter(name='total', 
               mode = 'markers',
               marker =dict(size = 0.01),
-              x=df_data.index, 
-              y=df_data.sum(axis=1), 
-              text=df_data.sum(axis=1),
+              x=df_data_.index, 
+              y=df_data_.sum(axis=1), 
+              text=df_data_.sum(axis=1),
               #colorscale="Cividis"
               )
-    )
-    # Change the bar mode
-    fig.update_layout(barmode='stack')
-    
-    fig.update_layout(
-        title_text="Demand Chart", 
-        plot_bgcolor='white',
-        xaxis = dict(
-            title_text="<b>Date </b>", 
-            linewidth = 0.1,
-            mirror = True,
-            showline=True,
-            ticks = 'inside',
-        ),
-        yaxis = dict(
-            title_text="<b>Quantity </b>",
-            gridcolor = 'LightGrey',
-            linewidth = 0.1,
-            mirror = True,
-            showline= True,
-            ticks = 'inside',
-        )
-    )
-    
-    fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
-    fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
-    container.plotly_chart(fig)
-    
-def single_avgdemand(item):
-  container = st.container()
+  )
+  # Change the bar mode
+  fig.update_layout(barmode='stack')
 
-  df_temp = df_input.copy()
-  df_temp =df_temp.loc[df_temp[segment]==item][['date','quantity']]
-  df_forplot = df_temp.groupby(pd.Grouper(freq=date_interval, key='date'))['quantity'].describe().fillna(0)
-  fig = go.Figure()
-  fig.add_trace(go.Bar(
-        x=df_forplot.index,
-        y=df_forplot['count']*df_forplot['mean'],
-        marker_color = find_color(item),
-        hovertext = df_forplot.apply(lambda x: 'Total: '+str((x['count']*x['mean']).astype(int)) +'<br>'+
-                                    'Classification: '+str(find_class(item)), axis=1),
-        text = df_forplot['count']* df_forplot['mean'],
-        textposition='outside',
-        name= 'Total Quantity'))
-  fig.add_trace(go.Scatter(
-        x=df_forplot.index,
-        y=df_forplot['mean'].apply(lambda x: round(x)),
-        mode = 'lines+markers',
-        error_y = dict(
-            type='data',
-            array = df_forplot['std'],
-            visible=True
-        ),
-        #hovertext = df_forplot.apply(lambda x: 'Average'+str(round(x['mean'],2)) +str(round(df_forplot['std'],2), axis=1)),
-        text = df_forplot['count'],
-        name= 'Average order count'))
   fig.update_layout(
-      title_text="Demand Chart for "+f"<b>{item}</b>("+find_class(item)+")", 
+      title_text="Demand Chart", 
       plot_bgcolor='white',
       xaxis = dict(
           title_text="<b>Date </b>", 
@@ -413,40 +409,112 @@ def single_avgdemand(item):
           ticks = 'inside',
       ),
       yaxis = dict(
-          title_text= f"<b>{time_interval} Demand</b> (units)",
+          title_text="<b>Quantity </b>",
           gridcolor = 'LightGrey',
           linewidth = 0.1,
           mirror = True,
           showline= True,
           ticks = 'inside',
-      )
+      ),
+      # legend = dict(
+      #     xanchor = 'right',
+      #     yanchor = 'bottom',
+      #     orientation = 'v',
+      #     y = -2,
+      #     x = 0
+      #     )
   )
 
-  fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
+  fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True,ticklabelmode="instant",dtick="M1",tickformat="%b\n%Y")#ticklabelmode="period", dtick="M1", tickformat="%b\n%Y"
   fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
+  st.plotly_chart(fig)
+  
+def single_avgdemand(item):
+   container = st.container()
 
-  container.plotly_chart(fig)
-  #summary df
-  info_summary ={
-      'item':item,
-      'classification' :find_class(item),    
-      'consumption_value_PHP' :df_summary.loc[item]['cvalue'],
-      'variation_coefficient' :df_summary.loc[item]['cv'],
-      'average_quantity' : df_summary.loc[item]['mean'],
-      'total_quantity' :df_summary.loc[item]['quantity']
-  }
-  results = pd.DataFrame(info_summary,index =[0])
-  results =results.set_index('item')
-  container.write(results)
+   df_temp = df_input.copy()
+   df_temp =df_temp.loc[df_temp[segment]==item][['date','quantity']]
+   df_forplot = pd.DataFrame()
+   df_forplot[['mean','count','total','std']] = df_temp.groupby(pd.Grouper(freq=date_interval, key='date')).agg(
+       mean = ('quantity', lambda x: x.mean()),
+       count = ('quantity', lambda x: x.count()),
+       total = ('quantity', lambda x: x.sum()),
+       std = ('quantity', lambda x: x.std())
+       ).fillna(0)
+   
+   if time_interval == 'Monthly':
+       df_forplot.index = pd.to_datetime(df_forplot.index).strftime('%b %Y')
+       
+   fig = go.Figure()
+   fig.add_trace(go.Bar(
+         x=df_forplot.index,
+         y=df_forplot['total'],
+         marker_color = find_color(item),
+         hovertext = df_forplot.apply(lambda x: 'Total: '+str((x['total']).astype(int)) +'<br>'+
+                                     'Classification: '+str(find_class(item)), axis=1),
+         text = df_forplot['count']* df_forplot['mean'],
+         textposition='outside',
+         name= 'Total Quantity'))
+   fig.add_trace(go.Scatter(
+         x=df_forplot.index,
+         y=df_forplot['mean'].apply(lambda x: round(x)),
+         mode = 'lines+markers',
+         error_y = dict(
+             type='data',
+             array = df_forplot['std'],
+             visible=True
+         ),
+         #hovertext = df_forplot.apply(lambda x: 'Average'+str(round(x['mean'],2)) +str(round(df_forplot['std'],2), axis=1)),
+         text = df_forplot[['mean','count']].apply(lambda x: 'Ave: '+str(int(x['mean'])) +' tires per order'+'<br>'+'Order count:'+ str(int(x['count'])) +' orders', axis =1),
+         name= 'Average order count'))
+   fig.update_layout(
+       title_text="Demand Chart for "+f"<b>{item}</b>("+find_class(item)+")", 
+       plot_bgcolor='white',
+       xaxis = dict(
+           title_text="<b>Date </b>", 
+           linewidth = 0.1,
+           mirror = True,
+           showline=True,
+           ticks = 'inside',
+       ),
+       yaxis = dict(
+           title_text= f"<b>{time_interval} Demand</b> (units)",
+           gridcolor = 'LightGrey',
+           linewidth = 0.1,
+           mirror = True,
+           showline= True,
+           ticks = 'inside',
+       )
+   )
 
+   fig.update_xaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
+   fig.update_yaxes(showline=True, linewidth=1, linecolor='black', mirror=True)
+
+   container.plotly_chart(fig)
+   #summary df
+   info_summary ={
+       'item':item,
+       'classification' :find_class(item),    
+       'consumption_value_PHP' :df_summary.loc[item]['cvalue'],
+       'variation_coefficient' :df_summary.loc[item]['cv'],
+       'average_quantity' : df_summary.loc[item]['mean'],
+       'total_quantity' :df_summary.loc[item]['quantity'],
+       'slope' :df_summary.loc[item]['slope']
+   }
+   st.write(df_summary)
+   results = pd.DataFrame(info_summary,index =[0])
+   results =results.set_index('item')
+   container.write(results)
+  
 def convert_df(df):
     return df.to_csv().encode('utf-8')
 
-selection = st.sidebar.selectbox('Select Segment:',('Pareto', 'Segment Demand','Overall Data', 'Filter Selection', 'All'))
-
+segment_i = st.sidebar.selectbox(label = '',
+                                 options = segment_choices,)
 time_interval = st.sidebar.radio(
      "Select date interval:",
-     ('Monthly', 'Weekly', 'Daily'))
+     ('Monthly', 'Weekly', 'Daily'),
+     index =1 )
 
 if time_interval == 'Daily':
      date_interval = 'D'
@@ -465,26 +533,23 @@ date_end = st.sidebar.date_input(
      value = df['date'].max().date(),
      min_value=df['date'].min().date(),
      max_value=df['date'].max().date())
+if platform == 'Gulong':
+    with st.sidebar.expander('Filter data:'):
+        active_only = st.checkbox('Active SKUs only',value = True)
+        types_included = st.multiselect('Tire types included:',
+                                       options = types,
+                                       default = types)
+        customer_included = st.multiselect('Customer types included:',
+                                           options = customers,
+                                           default = list(filter(lambda x: x!= 'affiliate', customers)))
+if platform == 'GoParts':
+    with st.sidebar.expander('Filter data:'):
+        types_included = st.multiselect('Garage types included:',
+                                       options = types,
+                                       default = types)
 
-st.sidebar.write("Selected: "+', '.join([ time_interval, segment_i]))
 
-if  segment_i != '':
-    st.sidebar.button('Refresh')
-    began = 1
-else:
-    st.sidebar.write('Select Product segmentation')
-
-    
-if began == 0:  
-    st.title(platform+' Product Classification')
-    
-    st.markdown("""
-                This app classifies the products based on **ABC**-**XYZ** classification. 
-                Relevant data are also presented such as the demand per indicated time interval. 
-                Kindly select the _parameters_ in the sidebar to begin analysis.
-                """)    
-elif (date_start>date_end):
-    began ==0
+if (date_start>date_end):
     st.title(platform+' Product Classification')
     
     st.markdown("""
@@ -493,59 +558,73 @@ elif (date_start>date_end):
                 Kindly select the _parameters_ in the sidebar to begin analysis.
                 """)   
     st.title("Please indicate a valid date interval.")
+    st.stop()
 
-
-
-elif began ==1 and (date_start<date_end):
-    st.title("Inventory Classification for "+platform+" by " + time_interval+" Demand per "+segment_i+" based on **ABC**-**XYZ** Classification")
+elif (date_start<date_end):
     segment = segment_dict[segment_i]
+
     df_input = df.loc[df['date'] > np.datetime64(date_start)].loc[df['date']< np.datetime64(date_end)]
+    
+    if platform == 'Gulong':
+        if active_only:
+            df_input = df_input.loc[df_input['is_active'] == 1,:]
+        if len(types_included)>0:
+            df_input = df_input.loc[df_input['tire_type'].isin(types_included)]
+        else:
+            st.markdown('### Please enter a tire type.')
+            st.stop()
+        if len(customer_included)>0:
+            df_input = df_input.loc[df_input['customer_type'].isin(customer_included)]
+        else:
+            st.markdown('### Please enter a customer type.')
+            st.stop()
+    if platform == 'GoParts':
+        if len(types_included)>0:
+            df_input = df_input.loc[df_input['garage_type'].isin(types_included)]
+        else:
+            st.markdown('### Please enter a tire type.')
+            st.stop()
     df_data, df_summary = get_data(df_input,segment,date_interval)
-    #intro_text = st.container()
+    if time_interval == 'Monthly':
+       df_data.index = pd.to_datetime(df_data.index).strftime('%b %Y')
+
+    df_final=df_summary.reset_index().groupby('class_').agg(
+                                segment_count=(segment, lambda x: x.nunique()),
+                                total_demand=('quantity', lambda x: int(x.sum())),
+                                avg_demand=('quantity', lambda x:int(x.mean())),
+                                total_profit=('cvalue', lambda x: round(x.sum(),2)),
+                                members = (segment,lambda x: ', '.join(x.unique())),
+        )
     
-    pareto = st.empty()
-    with pareto.container():
-        #pareto_text = st.container()
+    tabA, tab1, tab2,tab3,tab4 = st.tabs(["Introduction","Pareto Chart","Demand per Classification", "Demand per "+segment_i,"Results summary"])
+    with tabA:
+        intro_text = st.container()
+    with tab1:
+        pareto_text = st.container()
         plot_pareto()
-    if selection != 'Pareto' and selection != 'All':
-        pareto.empty()
-        
-    single_demand = st.empty()
-    with single_demand.container():
-        st.header('Demand per '+segment_i+":")
+    with tab3:
+        sbar_text = st.container()
+        stacked_bar()
     
+    with tab2:    
+        df_summary_ = df_summary.reset_index().copy()[[df_summary.index.name,'class_']]
+        df_summary_['options'] = df_summary_[df_summary.index.name] +'('+ df_summary_['class_']+')'
         item_i = st.selectbox(
             label = 'Select '+segment_i+' to view its '+time_interval.lower()+' demand:',
-            options =tuple(df_summary.index)
+            options =df_summary_['options']#tuple(df_summary.index)
             )
-        single_avgdemand(item =item_i)
-        #avgdemand_text = st.container()
-    if (selection != 'Segment Demand') and (selection != 'All'):
-        single_demand.empty()
-    
-    overall = st.empty()
-    with overall.container():
-        #sbar_text = st.container()
-        df_all_show = df_summary[['class','cvalue', 'quantity', 'cv']].copy()
-        df_all_show.columns = ['Classification', 'Profit (PHP)', 'Quantity Sold (units)', 'Coefficient of Variation']
-        st.dataframe(df_all_show)
-        stacked_bar() 
-        df_final=df_summary.reset_index().groupby('class').agg(
-                                    segment_count=(segment, lambda x: x.nunique()),
-                                    total_demand=('quantity', lambda x: int(x.sum())),
-                                    avg_demand=('quantity', lambda x:int(x.mean())),
-                                    total_profit=('cvalue', lambda x: round(x.sum(),2)),
-                                    members = (segment,lambda x: ', '.join(x.unique())),
-            )
-        #results_text = st.container()
+        item_i = df_summary_.loc[df_summary_['options']==item_i,df_summary.index.name].item()
+        single_avgdemand(item_i)
+        avgdemand_text = st.container()
+        
+    with tab4:        
+        results_text = st.container()
         st.dataframe(df_final)
-    if (selection != 'Overall Data') and (selection != 'All'):
-        overall.empty()
     
-    classify = st.empty()
-    with classify.container():
-        #classifications_text = st.container()
-        temp = st.container()
+    st.markdown(' --- ')
+    with st.container():
+        classifications_text = st.container()
+        st.header("Filter Classifications")
         st.text('All classifications:')
         ax, ay, az = st.columns(3)
         with ax:
@@ -604,21 +683,24 @@ elif began ==1 and (date_start<date_end):
         data_filter = np.array([ax_0,ay_0,az_0,bx_0,by_0,bz_0,cx_0,cy_0,cz_0])
         class_elements = np.array(['AX','AY','AZ','BX','BY','BZ','CX','CY','CZ'])
         if sum(data_filter)>0:
-            df_show = df_summary[df_summary['class'].isin(class_elements[data_filter])][['class','cvalue','quantity']]
+            df_show = df_summary[df_summary['class'].isin(class_elements[data_filter])][['class_','cvalue','quantity']]
             df_show.columns = ['Classification','Profit (PHP)','Quantity Sold (units)']
             if len(df_show) >0:
-                temp.dataframe(df_show)
+                st.dataframe(df_show)
             else:
                 st.write('No items are included.')
         else:
             st.write('Include at least 1 classification above.')
-    if (selection != 'Filter Selection') and (selection != 'All') :
-        classify.empty()
-        
-     
+    
+    
+    with st.expander('All data:'):
+        df_all_show = df_summary[['class','class_','cvalue', 'quantity', 'cv']].copy()
+        df_all_show.columns = ['Classification', 'Classification +/-','Profit (PHP)', 'Quantity Sold (units)', 'Coefficient of Variation']
+        st.dataframe(df_all_show)
+    
     st.header("Download data as .csv files")
     st.text("Click on the download button to save the supporting data for the analysis.")
-    save1, save2, save3 = st.columns([1,1,1])
+    save1, save2, save3 = st.columns(3)
     with save1:
         st.download_button(
             label = "Download results",
@@ -646,18 +728,18 @@ elif began ==1 and (date_start<date_end):
         
 
         
-    #intro_text.write("**Introduction**")
-    #intro_text.write("The ABC-XYZ is a paired classification for inventory itmes that would describe the importance of the "+segment_i+" to the business and and its variablity in demand. The **ABC classification** classifies a "+segment_i+" based on its contribution in profit. On the other hand, the **XYZ-classification** describes the variability in demand with respect to the coefficient of variation on its "+time_interval.lower()+" demand. The analysis below reflects the relevant information that would potentially help us in managing the inventory.")
-    #pareto_text.header('Pareto Analysis')
-    #pareto_text.write(
-        # "The pareto chart for the analysis is shown below. The bar plot corresponds to the consumption value (profit) in PHP represents the contribution of each "+segment_i.lower()+". On the other hand, the line plot shows the cumulattive percentage of the consumption value as we rank the decreasing consumption value of each segment. The most valueable items of the segment is constituted by the items that compose 80% of the total income, which we classify as A (highlighted as green)."+ 
-        # "Now, the other componenets that constitute up to 95% of the income would be classified as B (highlighted as yellow), while the rest are classified as C (highlighted as red)."
-        #               )
-    #sbar_text.header('Overall Demand')
-    #sbar_text.write(
-        # "The demand for each "+segment_i.lower()+" is shown below."
-        # )
-    #avgdemand_text.write('The average '+time_interval+' demand for '+item_i+' is shown above. We can see that the **XYZ** classification would tell how the demand for the respective '+segment_i+' would vary across time. Moreover, the errorbars would indicate its variation per order at any given time over the indicated time interval. This would provide us with some insight on how we can manage the stock and lay out expectations on what would be its demand.')
-    #results_text.header("Results")
-    #results_text.text('The summary of relevant parameters per each classifcation is shown below. The count, total demand, average demand, total profit, and the respective '+segment_i+' that falls into each product classification are summarized in the given table. The descriptions for the respective classifications are shown further below')
+    intro_text.write("**Introduction**")
+    intro_text.write("The ABC-XYZ is a paired classification for inventory itmes that would describe the importance of the "+segment_i+" to the business and and its variablity in demand. The **ABC classification** classifies a "+segment_i+" based on its contribution in profit. On the other hand, the **XYZ-classification** describes the variability in demand with respect to the coefficient of variation on its "+time_interval.lower()+" demand. The analysis below reflects the relevant information that would potentially help us in managing the inventory.")
+
+    pareto_text.write(
+        "The pareto chart for the analysis is shown below. The bar plot corresponds to the consumption value (profit) in PHP represents the contribution of each "+segment_i.lower()+". On the other hand, the line plot shows the cumulattive percentage of the consumption value as we rank the decreasing consumption value of each segment. The most valueable items of the segment is constituted by the items that compose 80% of the total income, which we classify as A (highlighted as green)."+ 
+        "Now, the other componenets that constitute up to 95% of the income would be classified as B (highlighted as yellow), while the rest are classified as C (highlighted as red)."
+                      )
+
+    sbar_text.write(
+        "The demand for each "+segment_i.lower()+" is shown below."
+        )
+    avgdemand_text.write('The average '+time_interval+' demand for '+item_i+' is shown above. We can see that the **XYZ** classification would tell how the demand for the respective '+segment_i+' would vary across time. Moreover, the errorbars would indicate its variation per order at any given time over the indicated time interval. This would provide us with some insight on how we can manage the stock and lay out expectations on what would be its demand.')
+    results_text.header("Results")
+    results_text.text('The summary of relevant parameters per each classifcation is shown below. The count, total demand, average demand, total profit, and the respective '+segment_i+' that falls into each product classification are summarized in the given table. The descriptions for the respective classifications are shown further below')
     
