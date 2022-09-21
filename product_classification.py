@@ -501,7 +501,7 @@ def single_avgdemand(item):
        'total_quantity' :df_summary.loc[item]['quantity'],
        'slope' :df_summary.loc[item]['slope']
    }
-   st.write(df_summary)
+
    results = pd.DataFrame(info_summary,index =[0])
    results =results.set_index('item')
    container.write(results)
